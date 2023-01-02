@@ -357,6 +357,7 @@ var liveData = {
       lastPatch[word_offset + i] = (i < value.length) ? value[i] : 0;
 
     var r = word2hex(word_offset) + byte2hex(word_length) + value.map(word2hex).join("");
+    println('sending ' + r);
     var sx = `f000201a0002${r}f7`;
     sl88.sendSysex(sx);
   }
