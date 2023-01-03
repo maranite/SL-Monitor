@@ -73,20 +73,6 @@ interface DataGetter {
     setData(offset: number, length: number, value: number[]): void;
 }
 
-
-function buildArrayDataGetter(data: number[]): DataGetter {
-    return {
-        getData(offset: number, length: number): number[] { 
-            return data.slice(offset, offset + length); 
-        },
-        setData(offset: number, length: number, value: number[]): void {
-            for (let i = 0; i < length; i++)
-                data[offset + i] = (i < value.length) ? value[i] : 0;
-        }
-    }
-}
-
-
 class ZoneData {
     constructor(public patch: PatchData, public zone: number) { }
     get data() { return this.patch.data; }
@@ -262,3 +248,171 @@ class GroupData {
     presets!: number[];
     active!: boolean;
 }
+
+//----------------------------------------
+
+type ATOM<N, T> = { name: N, regex: string, decode: (hex: string) => T, encode: (value: T) => string };
+type HEX_OR_ATOM = string | ATOM<any, any>;
+type ATOM_NAME<T> = T extends ATOM<infer N, infer K> ? N extends string ? N : never : never;
+type ATOM_TYPE<T> = T extends ATOM<infer N, infer K> ? K : never;
+type ATOM_PROP<A> = { [Q in A as `${ATOM_NAME<Q>}`]: ATOM_TYPE<A> };
+
+function BYTE<N extends string>(name: N): ATOM<N, number> {
+    return { 'name': name, regex: "([0-9a-f]{2})", decode: hex2byte, encode: byte2hex };
+}
+
+function WORD<N extends string>(name: N): ATOM<N, number> {
+    return { 'name': name, regex: "([0-9a-f]{4})", decode: hex2word, encode: word2hex };
+}
+
+function WORDS<N extends string>(name: N, size: number = 0): ATOM<N, number[]> {
+    return size ?
+        { 'name': name, regex: `([0-9a-f]{${4 * size}})`, decode: hex2array, encode: a => array2hex(a, size) } :
+        { 'name': name, regex: `([0-9a-f]{4,})`, decode: hex2array, encode: array2hex };
+}
+
+function ASCII<N extends string>(name: N, size: number): ATOM<N, string> {
+    return { 'name': name, regex: `([0-9a-f]{${2 * size}})`, decode: hex2ascii, encode: a => ascii2hex(a, size) };
+}
+
+function UNICODE<N extends string>(name: N, size: number): ATOM<N, string> {
+    return { 'name': name, regex: `([0-9a-f]{${4 * size}})`, decode: hex2unicode, encode: a => unicode2hex(a, size) };
+}
+
+function IGNORE(): ATOM<void, void> {
+    return { regex: `[0-9a-f]*` } as any;
+}
+
+function CreateMatcher<A extends HEX_OR_ATOM, B extends HEX_OR_ATOM, C extends HEX_OR_ATOM, D extends HEX_OR_ATOM, E extends HEX_OR_ATOM>
+    (a: A, b: B, c?: C, d?: D, e?: E) {
+    type PARAMS = ATOM_PROP<A> & ATOM_PROP<B> & ATOM_PROP<C> & ATOM_PROP<D> & ATOM_PROP<E>;
+
+    const hasRegex = (a: any): a is { regex: string } => typeof a === 'object' && 'regex' in a;
+    const isAtom = (a: any): a is ATOM<any, any> => hasRegex(a) && 'name' in a && 'regex' in a && 'encode' in a && 'decode' in a;
+
+    var params = [a, b, c, d, e].filter(e => typeof e !== 'undefined');
+    const regex = new RegExp(params.map(p => hasRegex(p) ? p.regex : p ?? "").join(), "gi");
+
+    return new class {
+        decode(hex: string): PARAMS {
+            const match = hex.match(regex);
+            if (!match)
+                return undefined as any;
+            var result = new Dict<any>();
+            var i = 1;
+            for (let r of params) {
+                if (isAtom(r) && r.name && r.decode)
+                    result[r.name] = r.decode(match[i++]);
+            }
+            return result as PARAMS;
+        }
+
+        encode(parms: PARAMS): string {
+            return params.map(p => isAtom(p) ? p.encode(parms[p.name as keyof PARAMS]) : typeof p === "string" ? p : "").join();
+        }
+    }
+}
+
+
+///---------------------------------------
+//TODO: Build an API which allows commands to be send
+function buildArrayDataGetter(data: number[]): DataGetter {
+    return {
+        getData(offset: number, length: number): number[] {
+            return data.slice(offset, offset + length);
+        },
+        setData(offset: number, length: number, value: number[]): void {
+            for (let i = 0; i < length; i++)
+                data[offset + i] = (i < value.length) ? value[i] : 0;
+        }
+    }
+}
+
+// var liveData = {
+//     getData: (word_offset: number, word_length: number): number[] => {
+//         return lastPatch.slice(word_offset, word_offset + word_length);
+//     },
+//     setData: (word_offset: number, word_length: number, value: number[]): void => {
+//         for (let i = 0; i < word_length; i++)
+//             lastPatch[word_offset + i] = (i < value.length) ? value[i] : 0;
+
+//         var r = word2hex(word_offset) + byte2hex(word_length) + value.map(word2hex).join("");
+//         println('sending ' + r);
+//         var sx = `f000201a0002${r}f7`;
+//         sl88.send(sx);
+//     }
+// };
+// var ram = new PatchData(liveData);
+
+
+class SL88API {
+
+    device: DeviceSysex;
+
+    constructor(midi: MidiPair) {
+        var dev = this.device = new DeviceSysex(midi, "00201a00", "");
+    }
+
+    PatchIn = CreateMatcher("01", BYTE('patchNo'), "0002", WORDS('patchData', 128), IGNORE());
+    PatchParam = CreateMatcher("02", WORD('offset'), BYTE('length'), WORDS('data'));
+
+    async loadPatch(patchNo: number = 16383) {
+        var r = await this.device.requestObjectAsync("06" + word2hex(patchNo), this.PatchIn.decode);
+        var patch = r.patchData;
+        var getter = {
+            getData: (word_offset: number, word_length: number): number[] => {
+                return patch.slice(word_offset, word_offset + word_length);
+            },
+            setData: (word_offset: number, word_length: number, value: number[]): void => {
+                for (let i = 0; i < word_length; i++)
+                    patch[word_offset + i] = (i < value.length) ? value[i] : 0;
+                if (patchNo == 16383) {
+                    const payload = this.PatchParam.encode({'offset': word_offset, 'length' : word_length, 'data' : value})
+                    this.device.send(payload)
+                }
+            }
+        };
+        return new PatchData(getter);
+    }
+}
+
+
+/*
+  .add("InitiateConnection", "00-05-00", () => { })
+  .add("InitiateConnectionReply", "05-001100", () => { })
+
+  .add("CheckAttached_", "007f", () => { })
+  .add("ConfirmAttached_", "7f", () => { })
+  .add("EndOfDump", "000a", () => { })
+
+  //.add("CurrentPatchName", "0a0000-s15", (name: string) => { })
+  .add("RequestPatchNameDump", "0010", () => { })
+  .add("PatchName", "0a-w-s15", (patch: number, name: string) => { })
+  .add("SetPatchParam", "02-w-n-#", (offset: number, length: number, data: number[]) => { })
+
+  .add("SetGlobalTranspose", "05-01-n", (value: number) => { })
+  .add("SetGlobalPedalMode", "05-02-n", (value: number) => { })
+  .add("SetGlobalCommonChannel", "05-03-n", (value: number) => { })
+
+  .add("SetGlobal", "05-n-n", (param: number, value: number) => { })
+  .add("MaybeSessionPreamble", "05-w", (someValue: number) => { }) // 010c-0200-0300
+  .add("SelectPatch", "06-w", (patch: number) => { })
+  .add("SetMode2", "08-n-w-w", (param: number, val1: number, val2: number) => { })
+  .add("SetMode", "08-n-n", (param: number, value: number) => { })
+  .add("SetMode3", "08-01-00-58-x85", () => { })
+  .add("HandShake", "10", () => { })
+  // 0700(CURVE#)(0000=FACTORY,5500=USER)(UNICODE NAME)0000000001000100(30 x little endian maybe curve values 0 usually x7f01/255)0000(127 x little endian velocity values)(two digits)
+  .add("Curve_", "0700-x173", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
+  .add("GetVelocityCurve_", "0700-n-w-u17-0000-0000-0100-w-x30-0000-x127-n", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
+  .add("SetVelocityCurve_", "0701-n-w-u17-0000-0000-0100-w-x30-0000-x127", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[]) => { })
+  .add("SaveToLocation", "09-w", (patch: number) => { })
+
+  .add("BeginDumpIn", "0011", () => { })
+  .add("PatchDumpIn", "01-w-0002-x256-n", (patch: number, patchData: number[], checksum: number) => { })
+  .add("PatchDumpOut", "01-w-x256", (patch: number, patchData: number[]) => { })
+  .add("GroupDumpIn", "03-n-5500-x76-*", (groupNo: number, data: number[]) => { })
+  .add("EndOfDumpIn", "11", () => { })
+
+  .add("GroupOrderIn", "04-5500-0000-x12-17", (groupIndices: number[]) => { })
+  .add("GroupOrderOut", "04-5500-0000-x12", (groupIndices: number[]) => { })
+*/

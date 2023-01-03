@@ -58,7 +58,7 @@ function array2hex(values: number[], forceLen?: number) {
   return result;
 }
 
-function hex2array(hex: string) : number[] {
+function hex2array(hex: string): number[] {
   return hex.match(/([0-9a-fA-F]{4})/g)?.map(hex2word) || [];
 }
 
@@ -67,11 +67,11 @@ function printSysex(data: string) {
   println("Sysex: " + prettyHex(data));
 }
 
-function convertASCIItoHex(asciiVal: string) {
-  let asciiCode = asciiVal.charCodeAt(0);
-  let hexValue = asciiCode.toString(16);
-  console.log("0x" + hexValue);
-}
+// function convertASCIItoHex(asciiVal: string) {
+//   let asciiCode = asciiVal.charCodeAt(0);
+//   let hexValue = asciiCode.toString(16);
+//   println("0x" + hexValue);
+// }
 
 /**
  * Clean-up hex for printing (groups bytes as pairs, upper case).
@@ -119,17 +119,18 @@ const toTitleCase = (str: string) => {
   }).join(' ');
 }
 
-
-
 ///---------------------------------------
-
+/** A callback which removes an element from an array */
+type Remover = () => boolean;
 
 interface Array<T> {
-  add(element: T): () => boolean
+  /** Returns a callback which removes element from the array */
+  getRemover(element: T): Remover;
+  pushWithRemover(element: T): Remover
+  unshiftWithRemover(element: T): Remover
 }
 
-Array.prototype.add = function (this: Array<any>, element: any) {
-  this.push(element);
+Array.prototype.getRemover = function (this: Array<any>, element: any) {
   return () => {
     var index = this.indexOf(element);
     if (index > -1)
@@ -138,6 +139,170 @@ Array.prototype.add = function (this: Array<any>, element: any) {
   };
 }
 
+Array.prototype.pushWithRemover = function (this: Array<any>, element: any) {
+  this.push(element);
+  return this.getRemover(element);
+}
+
+Array.prototype.unshiftWithRemover = function (this: Array<any>, element: any) {
+  this.unshift(element);
+  return this.getRemover(element);
+}
+
+
 ///---------------------------------------
 
+/** A callback which processes a sysex message. Returns true if the message was handled by the callback, else false. */
+type SysexListener = (hex: string) => boolean;
 
+
+
+abstract class SysexBase {
+
+  /**
+   * Registers a listener at the start of the listened chain.
+   * @param listener a SysexListener which should return true if it handles the message.
+   * @returns a function which, when called, removed the listener.
+   */
+  abstract registerListener(listener: SysexListener): Remover;
+
+  /** Sends a sysex message immediately. */
+  abstract send(hex: string): void;
+
+  /** Sends a sysex message and waits a while for the device to process it. */
+  async sendAsync(hex: string) {
+    return new Promise<void>((resolve, reject) => {
+      this.send(hex);
+      host.scheduleTask(resolve, 100);
+    })
+  }
+
+  /**
+   * Sends a sysex message and waits for a response.
+   * @param hex string of hex data to send
+   * @param expect optional regular expression denoting what response to expect.
+   * @returns a promise which resolves to the regex match result.
+   */
+  async requestAsync(hex: string, expect: string = "f0(\w+)f7") {
+    const rx = new RegExp(expect, "gi");
+    return new Promise<RegExpMatchArray>((resolve, reject) => {
+      const fulfill = this.registerListener((data: string) => {
+        var match = data.match(rx);
+        if (match) {
+          if (fulfill()) {
+            resolve(match);
+            return true;
+          }
+        }
+        return false;
+      });
+      this.send(hex);
+      host.scheduleTask(() => { fulfill() && reject(); }, 500);
+    })
+  }
+
+  async requestObjectAsync<T>(hex: string, decode: (hex: string) => T) {
+    return new Promise<T>((resolve, reject) => {
+      const fulfill = this.registerListener((data: string) => {
+        var result = decode(data);
+        if (result && fulfill()) {
+          resolve(result);
+          return true;
+        }
+        return false;
+      });
+      this.send(hex);
+      host.scheduleTask(() => { fulfill() && reject("Timed out after sending " + hex); }, 500);
+    })
+  }
+}
+
+
+/**
+ * Pairs Midi In and Out ports to enable promise based communication with a Midi device/
+ */
+class MidiPair extends SysexBase {
+  /**
+   * A chain of callbacks which listen for Sysex messages.
+   * The first listener to return True is regarded as having consumed the message, and subsequent listeners are not called.
+   */
+  sysexListeners: ((hexString: string) => boolean)[] = [];
+  onAllSysex(hexString: string) { }
+
+  constructor(public name: string, public midiIn: API.MidiIn, public midiOut: API.MidiOut) {
+    super();
+    midiIn.setSysexCallback((hexString: string) => {
+      var handled = false;
+
+      this.onAllSysex(hexString);
+
+      for (let listener of this.sysexListeners) {
+        handled ||= listener(hexString);
+        if (handled) break;
+      }
+
+      if (!handled)
+        println("Unhandled sysex: " + hexString);
+    });
+  }
+
+  /**
+   * Registers a listener at the start of the listened chain.
+   * @param listener a SysexListener which should return true if it handles the message.
+   * @returns a function which, when called, removed the listener.
+   */
+  registerListener(listener: SysexListener): Remover {
+    return this.sysexListeners.unshiftWithRemover(listener);
+  }
+
+  /** Sends a sysex message immediately. */
+  send(hex: string) {
+    this.midiOut.sendSysex(hex);
+  }
+}
+
+
+/** A shim which interprets sysex messages which are specific to a device - typically having a fixed preamble */
+class DeviceSysex extends SysexBase {
+
+  public prefix: string;
+  public suffix: string;
+  sysexListeners: ((hexString: string) => boolean)[] = [];
+
+  constructor(public midi: MidiPair, prefix: string = '', suffix: string = '') {
+    super();
+    this.prefix = 'f0' + prefix;
+    this.suffix = suffix + 'f7';
+    var deviceMatch = new RegExp(prefix + "([0-9a-f]+)" + suffix, "gi");
+    midi.registerListener(hex => {
+      const matched = hex.match(deviceMatch);
+      if (matched)
+        for (let listener of this.sysexListeners) {
+          if (listener(matched[1]))
+            return true;
+        }
+      return false;
+    });
+  }
+
+  send(hex: string): void {
+    println('sending ' + hex);
+    this.midi.send(this.prefix + hex + this.suffix);
+  }
+
+  /**
+   * Registers a listener at the start of the listened chain.
+   * @param listener a SysexListener which should return true if it handles the message.
+   * @returns a function which, when called, removed the listener.
+   */
+  registerListener(listener: SysexListener): Remover {
+    var deviceMatch = new RegExp(this.prefix + "([0-9a-f]+)" + this.suffix, "gi");
+    return this.midi.registerListener(
+      hex => {
+        const matched = hex.match(deviceMatch);
+        if (!matched)
+          return false;
+        return listener(matched[1]);
+      });
+  }
+}

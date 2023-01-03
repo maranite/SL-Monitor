@@ -21,72 +21,6 @@ switch (host.getPlatformType()) {
 
 
 
-type SysexListener = (hexString: string) => boolean;
-type ElementRemover = () => boolean;
-
-class MidiPair {
-  sysexListeners: ((hexString: string) => boolean)[] = [];
-  onAllSysex(hexString: string) { return false; }
-
-  constructor(public name: string, public midiIn: API.MidiIn, public midiOut: API.MidiOut, public prefix: string = "") {
-    midiIn.setSysexCallback((hexString: string) => {
-      var handled = false;
-
-      for (let listener of this.sysexListeners) {
-        handled ||= listener(hexString);
-        if (handled) break;
-      }
-
-      if (!handled)
-        handled = this.onAllSysex(hexString);
-
-      if (!handled)
-        this.log("Unhandled sysex: " + hexString);
-    });
-  }
-
-  registerListener(listener: SysexListener): ElementRemover {
-    this.sysexListeners.unshift(listener);
-    return () => {
-      var index = this.sysexListeners.indexOf(listener);
-      if (index > -1)
-        delete this.sysexListeners[index];
-      return index > -1;
-    };
-  }
-
-  log(message: string) {
-    println(`${this.name}: ${message}`);
-  }
-
-  sendSysex(hexString: string) {
-    this.midiOut.sendSysex(hexString);
-  }
-
-  async enquireAsync(hexString: string, expectedResponse?: RegExp) {
-    return new Promise<string>((resolve, reject) => {
-      const fulfill = this.sysexListeners.add((hex: string) => {
-        if (!expectedResponse || hex.match(expectedResponse)) {
-          if (fulfill()) {
-            resolve(hex);
-            return true;
-          }
-        }
-        return false;
-      });
-      this.sendSysex(hexString);
-      host.scheduleTask(() => { fulfill() && reject(); }, 500);
-    })
-  }
-
-  async sendAsync(hexString: string) {
-    return new Promise<void>((resolve, reject) => {
-      this.sendSysex(hexString);
-      host.scheduleTask(resolve, 100);
-    })
-  }
-}
-
 
 ///---------------------------------------
 
@@ -326,7 +260,7 @@ const sl88Preamble = "00201a00";
 var lastSL88Sysex: string = "";
 
 function onSysexFromSL88(data: string) {
-  app.sendSysex(data);
+  app.send(data);
   lastSL88Sysex = data;
   try {
     sl88Sysex.tryMatch(data);
@@ -337,7 +271,7 @@ function onSysexFromSL88(data: string) {
 }
 
 function onSysexFromApp(data: string) {
-  sl88.sendSysex(data);
+  sl88.send(data);
   if (data !== lastSL88Sysex) {
     try {
       appSysex.tryMatch(data)
@@ -348,32 +282,17 @@ function onSysexFromApp(data: string) {
   return true;
 }
 
-var liveData = {
-  getData: (word_offset: number, word_length: number): number[] => {
-    return lastPatch.slice(word_offset, word_offset + word_length);
-  },
-  setData: (word_offset: number, word_length: number, value: number[]): void => {
-    for (let i = 0; i < word_length; i++)
-      lastPatch[word_offset + i] = (i < value.length) ? value[i] : 0;
-
-    var r = word2hex(word_offset) + byte2hex(word_length) + value.map(word2hex).join("");
-    println('sending ' + r);
-    var sx = `f000201a0002${r}f7`;
-    sl88.sendSysex(sx);
-  }
-};
-var ram = new PatchData(liveData);
 
 function init() {
   sl88 = new MidiPair("SL88", host.getMidiInPort(0), host.getMidiOutPort(0));
   sl88.registerListener(onSysexFromSL88);
   sl88Sysex.log = logSL88;
-  sl88Sysex.send = hex => sl88.sendSysex(hex);
+  sl88Sysex.send = hex => sl88.send(hex);
 
   app = new MidiPair("App", host.getMidiInPort(1), host.getMidiOutPort(1));
   app.registerListener(onSysexFromApp);
   appSysex.log = logApp;
-  appSysex.send = hex => app.sendSysex(hex);
+  appSysex.send = hex => app.send(hex);
 }
 
 function exit() { }
