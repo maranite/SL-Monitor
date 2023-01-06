@@ -151,17 +151,17 @@ function buildSysex(preamble: string = '00201a00') {
 
 
 
-type ZoneKey = 'Zone1' | 'Zone2' | 'Zone3' | 'Zone4';
-type ZoneMap = { [K in ZoneKey]: number };
+// type ZoneKey = 'Zone1' | 'Zone2' | 'Zone3' | 'Zone4';
+// type ZoneMap = { [K in ZoneKey]: number };
 
-function ZoneMap(first: number, step: number = 1): ZoneMap {
-  return {
-    'Zone1': first,
-    'Zone2': first + step,
-    'Zone3': first + step + step,
-    'Zone4': first + step + step + step
-  } as any
-}
+// function ZoneMap(first: number, step: number = 1): ZoneMap {
+//   return {
+//     'Zone1': first,
+//     'Zone2': first + step,
+//     'Zone3': first + step + step,
+//     'Zone4': first + step + step + step
+//   } as any
+// }
 
 
 
@@ -208,7 +208,8 @@ var sl88SysexHandler = buildSysex("00201a00")
   .add("BeginDumpIn", "0011", () => { })
   .add("PatchDumpIn", "01-w-0002-x256-n", (patch: number, patchData: number[], checksum: number) => { })
   .add("PatchDumpOut", "01-w-x256", (patch: number, patchData: number[]) => { })
-  .add("GroupDumpIn", "03-n-5500-x76-*", (groupNo: number, data: number[]) => { })
+  .add("GroupDumpOut", "03-n-5500-x76", (groupNo: number, data: number[]) => { })
+  .add("GroupDumpIn", "03-n-5500-x76-n", (groupNo: number, data: number[]) => { })
   .add("EndOfDumpIn", "11", () => { })
 
   .add("GroupOrderIn", "04-5500-0000-x12-17", (groupIndices: number[]) => { })
@@ -218,8 +219,6 @@ var sl88SysexHandler = buildSysex("00201a00")
 
 //-----------------------------------------------------------
 
-var sl88: MidiPair;
-var app: MidiPair;
 function logApp(text: string) { println("APP : " + text); }
 function logSL88(text: string) { println("SL88: " + text); }
 
@@ -229,7 +228,7 @@ sl88SysexHandler.prototype.onSetPatchParam = (offset: number, length: number, da
 };
 
 sl88SysexHandler.prototype.onGroupDumpIn = (groupNo: number, data: number[]) => {
-  const dc = buildArrayDataGetter(data);
+  const dc = new ArrayDataGetter(data);
   var r = new GroupData(dc);
   println(`Group ${groupNo}: ${r.name}`);
   if (r.active) {
@@ -240,27 +239,41 @@ sl88SysexHandler.prototype.onGroupDumpIn = (groupNo: number, data: number[]) => 
 
 var lastPatch: number[] = [];
 
-sl88SysexHandler.prototype.onPatchDumpIn = (patchNo: number, data: number[], checksum: number) => {
-  lastPatch = data;
-  const dc = buildArrayDataGetter(data);
-  const patch = new PatchData(dc);
-  println(`Patch ${patchNo} In: Name: ${patch.name}`);
-}
+// sl88SysexHandler.prototype.onPatchDumpIn = (patchNo: number, data: number[], checksum: number) => {
+//   lastPatch = data;
+//   const dc = new ArrayDataGetter(data);
+//   const patch = new PatchData(dc);
+//   println(`Patch ${patchNo} In: Name: ${patch.name}`);
+// }
 
-sl88SysexHandler.prototype.onPatchDumpOut = (patchNo: number, data: number[]) => {
-  const dc = buildArrayDataGetter(data);
-  const patch = new PatchData(dc);
-  println(`Patch ${patchNo} Out Name: ${patch.name}`);
-}
+// sl88SysexHandler.prototype.onPatchDumpOut = (patchNo: number, data: number[]) => {
+//   const dc = new ArrayDataGetter(data);
+//   const patch = new PatchData(dc);
+//   println(`Patch ${patchNo} Out Name: ${patch.name}`);
+// }
 
 var appSysex = new sl88SysexHandler();
 var sl88Sysex = new sl88SysexHandler();
+
+sl88Sysex.onPatchDumpIn = (patchNo: number, data: number[], checksum: number) => {
+  lastPatch = data;
+  const dc = new ArrayDataGetter(data);
+  const patch = new PatchData(dc);
+  println(`SL88 Patch ${patchNo} In: Name: ${patch.name}`);
+}
+
+appSysex.onPatchDumpOut = (patchNo: number, data: number[]) => {
+  const dc = new ArrayDataGetter(data);
+  const patch = new PatchData(dc);
+  println(`APP Patch ${patchNo} Out Name: ${patch.name}`);
+}
+
 const sl88Preamble = "00201a00";
 
 var lastSL88Sysex: string = "";
 
 function onSysexFromSL88(data: string) {
-  app.send(data);
+  //app.send(data);
   lastSL88Sysex = data;
   try {
     sl88Sysex.tryMatch(data);
@@ -271,7 +284,7 @@ function onSysexFromSL88(data: string) {
 }
 
 function onSysexFromApp(data: string) {
-  sl88.send(data);
+  //sl88.send(data);
   if (data !== lastSL88Sysex) {
     try {
       appSysex.tryMatch(data)
@@ -282,12 +295,17 @@ function onSysexFromApp(data: string) {
   return true;
 }
 
+var slapi: SL88API;
+var sl88: MidiPair;
+var app: MidiPair;
 
 function init() {
   sl88 = new MidiPair("SL88", host.getMidiInPort(0), host.getMidiOutPort(0));
-  sl88.registerListener(onSysexFromSL88);
+  sl88.onUnhandledSysex = onSysexFromSL88;
+  // sl88.registerListener(onSysexFromSL88);
   sl88Sysex.log = logSL88;
   sl88Sysex.send = hex => sl88.send(hex);
+  slapi = new SL88API(sl88);
 
   app = new MidiPair("App", host.getMidiInPort(1), host.getMidiOutPort(1));
   app.registerListener(onSysexFromApp);
