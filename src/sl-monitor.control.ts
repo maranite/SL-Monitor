@@ -14,7 +14,7 @@ host.defineController(
 
 switch (host.getPlatformType()) {
   case com.bitwig.extension.api.PlatformType.WINDOWS:
-    host.addDeviceNameBasedDiscoveryPair(["MIDIIN2 (SL GRAND)", "loopMIDI Port"], ["MIDIOUT2 (SL GRAND)", "loopMIDI Port"]);
+    host.addDeviceNameBasedDiscoveryPair(["MIDIIN2 (SL GRAND)", "SL Editor Out"], ["MIDIOUT2 (SL GRAND)", "SL Editor In"]);
     break;
 }
 
@@ -200,9 +200,9 @@ var sl88SysexHandler = buildSysex("00201a00")
   .add("SetMode3", "08-01-00-58-x85", () => { })
   .add("HandShake", "10", () => { })
   // 0700(CURVE#)(0000=FACTORY,5500=USER)(UNICODE NAME)0000000001000100(30 x little endian maybe curve values 0 usually x7f01/255)0000(127 x little endian velocity values)(two digits)
-  .add("Curve_", "0700-x173", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
-  .add("GetVelocityCurve_", "0700-n-w-u17-0000-0000-0100-w-x30-0000-x127-n", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
-  .add("SetVelocityCurve_", "0701-n-w-u17-0000-0000-0100-w-x30-0000-x127", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[]) => { })
+  // .add("Curve_", "0700-x173", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
+  // .add("GetVelocityCurve_", "0700-n-w-u17-0000-0000-0100-w-x30-0000-x127-n", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) => { })
+  // .add("SetVelocityCurve_", "0701-n-w-u17-0000-0000-0100-w-x30-0000-x127", (curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[]) => { })
   .add("SaveToLocation", "09-w", (patch: number) => { })
 
   .add("BeginDumpIn", "0011", () => { })
@@ -223,13 +223,12 @@ function logApp(text: string) { println("APP : " + text); }
 function logSL88(text: string) { println("SL88: " + text); }
 
 sl88SysexHandler.prototype.onSetPatchParam = (offset: number, length: number, data: number[]) => {
-  var prop = PatchData.propertyMap[offset];
+  var prop = SL.Patch.propertyMap[offset];
   println(`onSetPatchParam... ${prop ?? 'unknown'} : ${word2hex(offset)}-${byte2hex(length)}-${data.map(byte2hex).join("")}`);
 };
 
 sl88SysexHandler.prototype.onGroupDumpIn = (groupNo: number, data: number[]) => {
-  const dc = new ArrayDataGetter(data);
-  var r = new GroupData(dc);
+  var r = new SL.PatchSet(data);
   println(`Group ${groupNo}: ${r.name}`);
   if (r.active) {
     println("is Active");
@@ -257,26 +256,25 @@ var sl88Sysex = new sl88SysexHandler();
 
 sl88Sysex.onPatchDumpIn = (patchNo: number, data: number[], checksum: number) => {
   lastPatch = data;
-  const dc = new ArrayDataGetter(data);
-  const patch = new PatchData(dc);
+  const patch = new SL.Patch(data);
   println(`SL88 Patch ${patchNo} In: Name: ${patch.name}`);
 }
 
 appSysex.onPatchDumpOut = (patchNo: number, data: number[]) => {
-  const dc = new ArrayDataGetter(data);
-  const patch = new PatchData(dc);
+  const patch = new SL.Patch(data);
   println(`APP Patch ${patchNo} Out Name: ${patch.name}`);
 }
 
-const sl88Preamble = "00201a00";
-
-var lastSL88Sysex: string = "";
 
 function onSysexFromSL88(data: string) {
-  //app.send(data);
-  lastSL88Sysex = data;
+  app.send(data);
   try {
-    sl88Sysex.tryMatch(data);
+    var r = SL.try_decode(data);
+    if (r) {
+      println(`SL88 from API: ` + r.toString());
+    }
+    else
+      sl88Sysex.tryMatch(data);
   } catch (e) {
     println(String(e));
   }
@@ -284,16 +282,21 @@ function onSysexFromSL88(data: string) {
 }
 
 function onSysexFromApp(data: string) {
-  //sl88.send(data);
-  if (data !== lastSL88Sysex) {
-    try {
-      appSysex.tryMatch(data)
-    } catch (e) {
-      println(String(e));
+  sl88.send(data);
+  try {
+    var r = SL.try_decode(data);
+    if (r) {
+      println(`APP from API: ` + r.toString());
     }
+    else
+      appSysex.tryMatch(data)
+  } catch (e) {
+    println(String(e));
   }
   return true;
 }
+
+// TODO: Solve for why APP messages appear when the app is disconnected!!!
 
 var slapi: SL88API;
 var sl88: MidiPair;
@@ -302,7 +305,6 @@ var app: MidiPair;
 function init() {
   sl88 = new MidiPair("SL88", host.getMidiInPort(0), host.getMidiOutPort(0));
   sl88.onUnhandledSysex = onSysexFromSL88;
-  // sl88.registerListener(onSysexFromSL88);
   sl88Sysex.log = logSL88;
   sl88Sysex.send = hex => sl88.send(hex);
   slapi = new SL88API(sl88);

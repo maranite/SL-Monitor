@@ -29,7 +29,7 @@ function hex2ascii(hex: string) {
   var str = '';
   for (var i = 0; (i < hex.length && hex.substring(i, i + 2) !== '00'); i += 2)
     str += String.fromCharCode(parseInt(hex.substring(i, i + 2), 16));
-  return str;
+  return str.trim();
 }
 
 function unicode2hex(str: string, maxlen?: number) {
@@ -48,7 +48,7 @@ function hex2unicode(hex: string) {
       break;
     str += String.fromCharCode(val);
   }
-  return str;
+  return str.trim();
 }
 
 function array2hex(values: number[], forceLen?: number) {
@@ -133,9 +133,9 @@ interface Array<T> {
 Array.prototype.getRemover = function (this: Array<any>, element: any) {
   return () => {
     var index = this.indexOf(element);
-    if (index > -1)
+    if (index > -1) 
       this.splice(index, 1);
-    return index > -1;
+    return (index > -1);
   };
 }
 
@@ -160,7 +160,7 @@ abstract class SysexBase {
   /**
    * A chain of callbacks which listen for Sysex messages.
    * The first listener to return True is regarded as having consumed the message, and subsequent listeners are not called.
-   */
+ */
   sysexListeners: ((hexString: string) => boolean)[] = [];
 
   /** The last sysex message to have been received */
@@ -170,7 +170,7 @@ abstract class SysexBase {
    * Registers a listener at the start of the listened chain.
    * @param listener a SysexListener which should return true if it handles the message.
    * @returns a function which, when called, removed the listener.
-   */
+ */
   registerListener(listener: SysexListener): Remover {
     return this.sysexListeners.unshiftWithRemover(listener);
   }
@@ -192,56 +192,30 @@ abstract class SysexBase {
    * @param expect optional regular expression denoting what response to expect.
    * @returns a promise which resolves to the regex match result.
    */
-  async requestAsync(hex: string, expect: string = "f0(\w+)f7") {
-    const rx = new RegExp(expect, "i");
-    return new Promise<RegExpMatchArray>((resolve, reject) => {
-      const fulfill = this.registerListener((data: string) => {
-        var match = data.match(rx);
-        if (match) {
-          if (fulfill()) {
-            resolve(match);
-            return true;
-          }
-        }
-        return false;
-      });
-      this.send(hex);
-      host.scheduleTask(() => { fulfill() && reject(); }, 500);
-    })
-  }
-
   async awaitReply<T>(decode: (hex: string) => T) {
     return new Promise<T>((resolve, reject) => {
       const fulfill = this.registerListener((data: string) => {
         var result = decode(data);
-        if (result && fulfill()) {
-          resolve(result);
-          return true;
-        }
+        if (result)
+          if (fulfill()) {
+            resolve(result);
+            return true;
+          }
         return false;
       });
-      host.scheduleTask(() => { fulfill() && reject("Timed out"); }, 500);
+      host.scheduleTask(() => {
+        if (fulfill()) {
+          reject("Timed out");                    
+          println("Timed out");
+        }
+      }, 500);
     })
   }
-
 
   async requestObjectAsync<T>(hex: string, decode: (hex: string) => T) {
     this.send(hex);
     return this.awaitReply(decode);
-    // return new Promise<T>((resolve, reject) => {
-    //   const fulfill = this.registerListener((data: string) => {
-    //     var result = decode(data);
-    //     if (result && fulfill()) {
-    //       resolve(result);
-    //       return true;
-    //     }
-    //     return false;
-    //   });
-    //   this.send(hex);
-    //   host.scheduleTask(() => { fulfill() && reject("Timed out after sending " + hex); }, 500);
-    // })
   }
-
 
   async echoMostRecentReceived<T>(decode: (hex: string) => T) {
     return this.requestObjectAsync(this.mostRecentlyReceived, decode);
@@ -307,202 +281,188 @@ class DeviceSysex extends SysexBase {
     });
   }
 
-
   send(hex: string): void {
     // println('sending ' + hex);
     this.midi.send(this.prefix + hex + this.suffix);
   }
 }
 
+//----------------------------------------------
 
-
-
-
-namespace SL {
-
-  type codec = [rx: string, decode: (hex: string) => any, encode: (data: any) => string];
-  const byte: codec = [`([0-9a-f]{2})`, hex2byte, byte2hex];
-  const word: codec = [`([0-9a-f]{4})`, hex2word, word2hex];
-  const ascii = (length: number): codec => [`([0-9a-f]{${2 * length}})`, hex2ascii, s => ascii2hex(s, length)];
-  const unicode = (length: number): codec => [`([0-9a-f]{${2 * length}})`, hex2unicode, s => ascii2hex(s, length)];
-  const words = (length: number = 0): codec => length ?
-    [`([0-9a-f]{${4 * length}})`, hex2array, s => array2hex(s, length)] :
-    [`(([0-9a-f]{4})*)`, hex2array, array2hex];
-
-  type AnyConstructor = (new (...args: any[]) => any);
-
-  type StaticMembers = {
-    regex: RegExp;
-    decode: (hex: string) => any;
-  }
-
-  type Retype<T extends new (...args: any[]) => any>
-    = T extends new (...args: infer A) => infer X ? {
-      new(...args: A): X & {
-        toHex(): string
-        toString(): string
-      }
-    }
-    & StaticMembers
-    & { encode(...args: A): string }
-    : never
-
-  function getArgs(func: Function) {
-    return func.toString().match(/function [^(]+\(([^)]*)\)/)![1].split(", ");
-  }
-
-  /** Monkey patches a POJO class to have static members like decode, encode, regex as well as instance members toHex and toString */
-  function syx<T extends new (...args: any[]) => any>(target: T, ...args: (string | codec)[]): Retype<T> {
-    const ctor = target as any as Retype<T>;
-    const regx = ctor.regex = new RegExp(args.map(a => typeof a === 'string' ? a : a[0]).join(""), "i");
-    const pnames = getArgs(target);
-    const codecs: codec[] = args.filter(a => typeof a !== 'string') as codec[];
-    all_classes.push(ctor);
-
-    ctor.decode = (hex: string) => {
-      var match = hex.match(regx);
-      if (match) {
-        const rest = match.slice(1).map((r, i) => codecs[i][1](r));
-        //println(JSON.stringify(rest));
-        return new ctor(...rest);
-      }
-    };
-    ctor.encode = (...args2: any[]) => {
-      return args.map(a => typeof a === 'string' ? a : a[2](args2.shift())).join("");
-    };
-    ctor.prototype.toHex = function (this: any) {
-      const r = pnames.slice(0);
-      return args.map((a, i) => typeof a === 'string' ? a : a[2](this[r.shift()!])).join("");
-    }
-    ctor.prototype.toString = function (this: any) {
-      return `${ctor.name} ` + pnames.map(p => `${p}=${this[p]}`).join(", ");
-    }
-    return target as any;
-  }
-
-  /** List of all SYSEX handler class which try_decode() could return */
-  export const all_classes: (StaticMembers & AnyConstructor)[] = [];
-
-  /** Attempts to decode a sysex message and return an instance of the corresponding SYSEX class */
-  export function try_decode(hex: string) {
-    for (let ctor of all_classes) {
-      var result = ctor.decode(hex);
-      if (result)
-        return result;
-    }
-  }
-
-  export const PatchIn = syx(class PatchIn { constructor(public patchNo: number, public patchData: number[], public checksum: number) { } }, "01", word, "0002", words(256), byte);
-  export const PatchOut = syx(class PatchOut { constructor(public patchNo: number, public patchData: number[]) { } }, "01", word, words(256));
-  export const PatchParam = syx(class PatchParam { constructor(public offset: number, public length: number, public data: number[]) { } }, "02", word, byte, words());
-  export const RecallPatch = syx(class RecallPatch { constructor(public patchNo: number) { } }, "06", word);
-  export const StorePatch = syx(class StorePatch { constructor(public patchNo: number) { } }, "09", word);
-  export const PatchName = syx(class PatchName { constructor(public patchNo: number, public name: string) { } }, "0a", word, ascii(15));
-  export const SetMode = syx(class SetMode { constructor(public param: number, public value1: number) { } }, "08", byte, byte);
-  export const SetMode2 = syx(class SetMode2 { constructor(public param: number, public value1: number, public value2: number) { } }, "08", byte, word, word);
-  export const SetMode3 = syx(class SetMode3 { constructor(public data: number[]) { } }, "08010058", words(256));
-  export const SetGlobalTranspose = syx(class SetGlobalTranspose { constructor(public value: number) { } }, "0501", byte);
-  export const SetGlobalPedalMode = syx(class SetGlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
-  export const SetGlobalCommonChannel = syx(class SetGlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
-  export const InitiateConnection = syx(class InitiateConnection { constructor() { } }, "000500");
-  export const InitiateConnectionReply = syx(class InitiateConnectionReply { constructor() { } }, "05001100");
-  export const CheckAttached = syx(class CheckAttached { constructor() { } }, "007f");
-  export const ConfirmAttached = syx(class ConfirmAttached { constructor() { } }, "7f");
-  export const EndOfDump = syx(class EndOfDump { constructor() { } }, "000a");
-  export const RequestPatchNameDump = syx(class RequestPatchNameDump { constructor() { } }, "0010");
-  export const EndOfPatchNameDump = syx(class EndOfPatchNameDump { constructor() { } }, "10");
-  export const BeginDumpIn = syx(class BeginDumpIn { constructor() { } }, "0011");
-  export const EndOfDumpIn = syx(class EndOfDumpIn { constructor() { } }, "11");
-  export const SetGlobal = syx(class SetGlobal { constructor(public param: number, public value: number) { } }, "05", byte, byte);
-  export const MaybeSessionPreamble = syx(class MaybeSessionPreamble { constructor(public someValue: number) { } }, "05", word);
-  export const GroupOrderIn = syx(class GroupOrderIn { constructor(public groupIndices: number[]) { } }, "0455000000", words(12), "17");
-  export const GroupOrderOut = syx(class GroupOrderOut { constructor(public groupIndices: number[]) { } }, "0455000000", words(12));
-  export const GroupDumpIn = syx(class GroupDumpIn { constructor(public groupNo: number, public data: number[], public checksum: number) { } }, "03", byte, "5500", words(76), byte);
-  export const GetVelocityCurve = syx(class GetVelocityCurve { constructor(curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number) { } }, "0700", byte, word, unicode(17), "000000000100", word, words(30), "0000", words(127), byte);
-  export const SetVelocityCurve = syx(class SetVelocityCurve { constructor(curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[]) { } }, "0701", byte, word, unicode(17), "000000000100", word, words(30), "0000", words(127));
-  export const Curve = syx(class Curve { constructor(public data: number[]) { } }, "0700", words(173));
-  // export const Curve2 { constructor((curveNo: number, type: VelocityCurveType, name: string, unk: number, points: number[], velocities: number[], trailer: number)) {} }("0700-x173")
-  // 0700(CURVE#)(0000=FACTORY,5500=USER)(UNICODE NAME)0000000001000100(30 x little endian maybe curve values 0 usually x7f01/255)0000(127 x little endian velocity values)(two digits)
-
-  export type PatchIn = InstanceType<typeof PatchIn>;
-  export type PatchOut = InstanceType<typeof PatchOut>;
-  export type PatchParam = InstanceType<typeof PatchParam>;
-  export type RecallPatch = InstanceType<typeof RecallPatch>;
-  export type StorePatch = InstanceType<typeof StorePatch>;
-  export type PatchName = InstanceType<typeof PatchName>;
-  export type SetMode = InstanceType<typeof SetMode>;
-  export type SetMode2 = InstanceType<typeof SetMode2>;
-  export type SetMode3 = InstanceType<typeof SetMode3>;
-  export type SetGlobalTranspose = InstanceType<typeof SetGlobalTranspose>;
-  export type SetGlobalPedalMode = InstanceType<typeof SetGlobalPedalMode>;
-  export type SetGlobalCommonChannel = InstanceType<typeof SetGlobalCommonChannel>;
-  export type InitiateConnection = InstanceType<typeof InitiateConnection>;
-  export type InitiateConnectionReply = InstanceType<typeof InitiateConnectionReply>;
-  export type CheckAttached = InstanceType<typeof CheckAttached>;
-  export type ConfirmAttached = InstanceType<typeof ConfirmAttached>;
-  export type EndOfDump = InstanceType<typeof EndOfDump>;
-  export type RequestPatchNameDump = InstanceType<typeof RequestPatchNameDump>;
-  export type EndOfPatchNameDump = InstanceType<typeof EndOfPatchNameDump>;
-  export type BeginDumpIn = InstanceType<typeof BeginDumpIn>;
-  export type EndOfDumpIn = InstanceType<typeof EndOfDumpIn>;
-  export type SetGlobal = InstanceType<typeof SetGlobal>;
-  export type MaybeSessionPreamble = InstanceType<typeof MaybeSessionPreamble>;
-  export type GroupOrderIn = InstanceType<typeof GroupOrderIn>;
-  export type GroupOrderOut = InstanceType<typeof GroupOrderOut>;
-  export type GroupDumpIn = InstanceType<typeof GroupDumpIn>;
-  export type GetVelocityCurve = InstanceType<typeof GetVelocityCurve>;
-  export type SetVelocityCurve = InstanceType<typeof SetVelocityCurve>;
-  export type Curve = InstanceType<typeof Curve>;
-
-  export function isPatchIn(a : any) : a is PatchIn { return a instanceof PatchIn; }
-  export function isPatchOut(a : any) : a is PatchOut { return a instanceof PatchOut; }
-  export function isPatchParam(a : any) : a is PatchParam { return a instanceof PatchParam; }
-  export function isRecallPatch(a : any) : a is RecallPatch { return a instanceof RecallPatch; }
-  export function isStorePatch(a : any) : a is StorePatch { return a instanceof StorePatch; }
-  export function isPatchName(a : any) : a is PatchName { return a instanceof PatchName; }
-  export function isSetMode(a : any) : a is SetMode { return a instanceof SetMode; }
-  export function isSetMode2(a : any) : a is SetMode2 { return a instanceof SetMode2; }
-  export function isSetMode3(a : any) : a is SetMode3 { return a instanceof SetMode3; }
-  export function isSetGlobalTranspose(a : any) : a is SetGlobalTranspose { return a instanceof SetGlobalTranspose; }
-  export function isSetGlobalPedalMode(a : any) : a is SetGlobalPedalMode { return a instanceof SetGlobalPedalMode; }
-  export function isSetGlobalCommonChannel(a : any) : a is SetGlobalCommonChannel { return a instanceof SetGlobalCommonChannel; }
-  export function isInitiateConnection(a : any) : a is InitiateConnection { return a instanceof InitiateConnection; }
-  export function isInitiateConnectionReply(a : any) : a is InitiateConnectionReply { return a instanceof InitiateConnectionReply; }
-  export function isCheckAttached(a : any) : a is CheckAttached { return a instanceof CheckAttached; }
-  export function isConfirmAttached(a : any) : a is ConfirmAttached { return a instanceof ConfirmAttached; }
-  export function isEndOfDump(a : any) : a is EndOfDump { return a instanceof EndOfDump; }
-  export function isRequestPatchNameDump(a : any) : a is RequestPatchNameDump { return a instanceof RequestPatchNameDump; }
-  export function isEndOfPatchNameDump(a : any) : a is EndOfPatchNameDump { return a instanceof EndOfPatchNameDump; }
-  export function isBeginDumpIn(a : any) : a is BeginDumpIn { return a instanceof BeginDumpIn; }
-  export function isEndOfDumpIn(a : any) : a is EndOfDumpIn { return a instanceof EndOfDumpIn; }
-  export function isSetGlobal(a : any) : a is SetGlobal { return a instanceof SetGlobal; }
-  export function isMaybeSessionPreamble(a : any) : a is MaybeSessionPreamble { return a instanceof MaybeSessionPreamble; }
-  export function isGroupOrderIn(a : any) : a is GroupOrderIn { return a instanceof GroupOrderIn; }
-  export function isGroupOrderOut(a : any) : a is GroupOrderOut { return a instanceof GroupOrderOut; }
-  export function isGroupDumpIn(a : any) : a is GroupDumpIn { return a instanceof GroupDumpIn; }
-  export function isGetVelocityCurve(a : any) : a is GetVelocityCurve { return a instanceof GetVelocityCurve; }
-  export function isSetVelocityCurve(a : any) : a is SetVelocityCurve { return a instanceof SetVelocityCurve; }
-  export function isCurve(a : any) : a is Curve { return a instanceof Curve; }
-
-
-}
-
-
-// const tyt = new SL.PatchName(99, "POCKEY");
-
-// println(tyt.toString());
-
-// const str = tyt.toHex();
-// println(str);
-
-// var t = SL.try_decode(str);
-// if (t instanceof SL.PatchName) {
-//   println(t.toHex() == str ? "Decode works" : "shit!")
-// }
-
-// const ui : SL.PatchName = null as any;
-
-
-// var qwq = SL.PatchName.encode(99, "POCKEY");
-// println(qwq == str ? "encode works" : "encode is shit!")
-
+/** Provides a map of standard Midi CC controls */
+const midiCC = {
+  /** Allows user to switch bank for patch selection. Program change used with Bank Select. MIDI can access 16,384 patches per MIDI channel. */
+  bankSelect: 0,
+  /** Generally this CC controls a vibrato effect (pitch, loudness, brighness). What is modulated is based on the patch. */
+  modulation: 1,
+  /** Oftentimes associated with aftertouch messages. It was originally intended for use with a breath MIDI  in which blowing harder produced higher MIDI control values. It can be used for modulation as well. */
+  breath: 2,
+  /** */
+  cc03: 3,
+  /** Often used with aftertouch messages. It can send a continuous stream of values based on how the pedal is used. */
+  foot: 4,
+  /** Controls portamento rate to slide between 2 notes played subsequently. */
+  portamentoTime: 5,
+  /** Controls Value for NRPN or RPN parameters. */
+  dataEntry: 6,
+  /** Controls the volume of the channel. */
+  channelVolume: 7,
+  /** Controls the left and right balance, generally for stereo patches. A value of 64 equals the center. */
+  balance: 8,
+  /** */
+  cc09: 9,
+  /** Controls the left and right balance, generally for mono patches. A value of 64 equals the center. */
+  pan: 10,
+  /** Expression is a percentage of volume (CC7). */
+  expression: 11,
+  /** Usually used to control a parameter of an effect within the synth or workstation. */
+  effect1: 12,
+  /** Usually used to control a parameter of an effect within the synth or workstation. */
+  effect2: 13,
+  cc14: 14,
+  cc15: 15,
+  generalPurpose1: 16,
+  generalPurpose2: 17,
+  generalPurpose3: 18,
+  generalPurpose4: 19,
+  cc20: 20,
+  cc21: 21,
+  cc22: 22,
+  cc23: 23,
+  cc24: 24,
+  cc25: 25,
+  cc26: 26,
+  cc27: 27,
+  cc28: 28,
+  cc29: 29,
+  cc30: 30,
+  cc31: 31,
+  bankSelectFine: 32,
+  modulationFine: 33,
+  breathFine: 34,
+  cc35: 35,
+  footFine: 36,
+  portamentoTimeFine: 37,
+  dataEntryFine: 38,
+  channelVolumeFine: 39,
+  balanceFine: 40,
+  cc41: 41,
+  panFine: 42,
+  expressionFine: 43,
+  effect1Fine: 44,
+  effect2Fine: 45,
+  cc46: 46,
+  cc47: 47,
+  cc48: 48,
+  cc49: 49,
+  cc50: 50,
+  cc51: 51,
+  cc52: 52,
+  cc53: 53,
+  cc54: 54,
+  cc55: 55,
+  cc56: 56,
+  cc57: 57,
+  cc58: 58,
+  cc59: 59,
+  cc60: 60,
+  cc61: 61,
+  cc62: 62,
+  cc63: 63,
+  /** ≤63 off, ≥64 on	Controls sustain pedal. Nearly every synth will react to CC 64. (See also Sostenuto CC 66) */
+  damperPedal: 64,
+  /** ≤63 off, ≥64 on */
+  portamento: 65,
+  /** ≤63 off, ≥64 on	Like the Sustain  (CC 64) but only holds notes that were “On” when the pedal was pressed. */
+  sostenuto: 66,
+  /** ≤63 off, ≥64 on	Lowers the volume of notes played. */
+  softPedal: 67,
+  /** ≤63 off, ≥64 on	Turns Legato effect between 2 subsequent notes on or off. */
+  legatoFootswitch: 68,
+  /** ≤63 off, ≥64 on	Another way to “hold notes” (s 64 a 66). However notes fade out according to their release parameter rather than when the pedal is released.*/
+  hold2: 69,
+  /** Usually controls the way a sound is produced. Default = Sound Variation. */
+  sound1: 70,
+  /** Allows shaping the Voltage Controlled Filter (VCF). Default = Resonance also (Timbre or Harmonics) */
+  sound2: 71,
+  /** Controls release time of the Voltage controlled Amplifier (VCA). Default = Release Time. */
+  sound3: 72,
+  /** Controls the “Attack’ of a sound. The attack is the amount of time it takes for the sound to reach maximum amplitude. */
+  sound4: 73,
+  /** Controls VCFs cutoff frequency of the filter. */
+  sound5: 74,
+  /** Generic – Some manufacturers may use to further shave their sounds. */
+  sound6: 75,
+  /** Generic – Some manufacturers may use to further shave their sounds. */
+  sound7: 76,
+  /** Generic – Some manufacturers may use to further shave their sounds. */
+  sound8: 77,
+  /** Generic – Some manufacturers may use to further shave their sounds. */
+  sound9: 78,
+  /** Generic – Some manufacturers may use to further shave their sounds. */
+  sound10: 79,
+  /** Decay Generic or on/off switch ≤63 off, ≥64 on */
+  generalPurpose5: 80,
+  /** Hi-Pass Filter Frequency or Generic on/off switch ≤63 off, ≥64 on */
+  generalPurpose6: 81,
+  /** Generic on/off switch  ≤63 off, ≥64 on */
+  generalPurpose7: 82,
+  /** Generic on/off switch  ≤63 off, ≥64 on */
+  generalPurpose8: 83,
+  /** Controls the amount of Portamento. */
+  portamentoControl: 84,
+  cc85: 85,
+  cc86: 86,
+  cc87: 87,
+  cc88: 88,
+  cc89: 89,
+  cc90: 90,
+  /** Usually controls reverb send amount */
+  effects1Depth: 91,
+  /** Usually controls tremolo amount */
+  effects2Depth: 92,
+  /** Usually controls chorus amount */
+  effects3Depth: 93,
+  /** Usually controls detune amount */
+  effects4Depth: 94,
+  /** Usually controls phaser amount */
+  effects5Depth: 95,
+  /** Usually used to increment data for RPN and NRPN messages. */
+  dataIncrement: 96,
+  /** Usually used to decrement data for RPN and NRPN messages. */
+  dataDecrement: 97,
+  /** For s 6, 38, 96, and 97, it selects the NRPN parameter. */
+  NRPN_LSB: 98,
+  /** For s 6, 38, 96, and 97, it selects the NRPN parameter. */
+  NRPN_MSB: 99,
+  /** For s 6, 38, 96, and 97, it selects the RPN parameter. */
+  RPN_LSB: 100,
+  /** For s 6, 38, 96, and 97, it selects the RPN parameter. */
+  RPN_MSB: 101,
+  cc102: 102,
+  cc103: 103,
+  cc104: 104,
+  cc105: 105,
+  cc106: 106,
+  cc107: 107,
+  cc108: 108,
+  cc109: 109,
+  cc110: 110,
+  cc111: 111,
+  cc112: 112,
+  cc113: 113,
+  cc114: 114,
+  cc115: 115,
+  cc116: 116,
+  cc117: 117,
+  cc118: 118,
+  cc119: 119
+  // allSoundOff: 120,
+  // resetAlls: 121,
+  // localControlOnOff: 122,
+  // allNotesOff: 123,
+  // omniModeOff: 124,
+  // omniModeOn: 125,
+  // monoOperation: 126,
+  // polyOperation: 127
+};
