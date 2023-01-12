@@ -62,40 +62,6 @@ function hex2array(hex: string): number[] {
   return hex.match(/([0-9a-fA-F]{4})/g)?.map(hex2word) || [];
 }
 
-
-function printSysex(data: string) {
-  println("Sysex: " + prettyHex(data));
-}
-
-// function convertASCIItoHex(asciiVal: string) {
-//   let asciiCode = asciiVal.charCodeAt(0);
-//   let hexValue = asciiCode.toString(16);
-//   println("0x" + hexValue);
-// }
-
-/**
- * Clean-up hex for printing (groups bytes as pairs, upper case).
- * @return {string}
- */
-function prettyHex(hex: string) {
-  //  hex = hex.replace(" ", "", "g"); // remove spaces
-  hex = hex.replace(" ", ""); // remove spaces
-
-  var result = "";
-  var first = true;
-  for (let i = 0; i < hex.length; i += 2) {
-    if (!first)
-      result += " ";
-
-    result += hex.substring(i, 2);
-    first = false;
-  }
-
-  return result.toUpperCase();
-}
-
-
-
 function string2unicodes(str: string, maxlen?: number): number[] {
   maxlen = maxlen || str.length;
   var r: number[] = Array(maxlen);
@@ -104,13 +70,13 @@ function string2unicodes(str: string, maxlen?: number): number[] {
   return r;
 }
 
-function unicodes2string(atoms: number[]) {
+function unicodes2string(charCodes: number[]) {
   var result = "";
-  for (let charCode of atoms) {
+  for (let charCode of charCodes) {
     if (charCode == 0) break;
     result += String.fromCharCode(charCode);
   }
-  return result;
+  return result.trim();
 }
 
 const toTitleCase = (str: string) => {
@@ -133,7 +99,7 @@ interface Array<T> {
 Array.prototype.getRemover = function (this: Array<any>, element: any) {
   return () => {
     var index = this.indexOf(element);
-    if (index > -1) 
+    if (index > -1)
       this.splice(index, 1);
     return (index > -1);
   };
@@ -157,10 +123,33 @@ type SysexListener = (hex: string) => boolean;
 
 
 abstract class SysexBase {
+
+  /** Called when any qualifying systex message is received */
+  onAllSysex(hex: string) { }
+
+  /** Called when a received message was not handled by any registered listener */
+  onUnhandledSysex(hex: string) { } //println("Unhandled sysex: " + hex); }
+
+  /** Provides handling of qualified sysex messages */
+  processSysex(hex: string) {
+    this.mostRecentlyReceived = hex;
+    try {
+      this.onAllSysex(hex);
+      for (let listener of this.sysexListeners) {
+        if (listener(hex))
+          return true;
+      }
+      this.onUnhandledSysex(hex);
+    } catch (error) {
+      errorln(String(error));
+    }
+    return false;
+  }
+
   /**
    * A chain of callbacks which listen for Sysex messages.
    * The first listener to return True is regarded as having consumed the message, and subsequent listeners are not called.
- */
+  */
   sysexListeners: ((hexString: string) => boolean)[] = [];
 
   /** The last sysex message to have been received */
@@ -170,7 +159,7 @@ abstract class SysexBase {
    * Registers a listener at the start of the listened chain.
    * @param listener a SysexListener which should return true if it handles the message.
    * @returns a function which, when called, removed the listener.
- */
+  */
   registerListener(listener: SysexListener): Remover {
     return this.sysexListeners.unshiftWithRemover(listener);
   }
@@ -205,7 +194,7 @@ abstract class SysexBase {
       });
       host.scheduleTask(() => {
         if (fulfill()) {
-          reject("Timed out");                    
+          reject("Timed out");
           println("Timed out");
         }
       }, 500);
@@ -228,25 +217,9 @@ abstract class SysexBase {
  */
 class MidiPair extends SysexBase {
 
-  onAllSysex(hex: string) { }
-  onUnhandledSysex(hex: string) { println("Unhandled sysex: " + hex); }
-
   constructor(public name: string, public midiIn: API.MidiIn, public midiOut: API.MidiOut) {
     super();
-    midiIn.setSysexCallback((hex: string) => {
-      this.mostRecentlyReceived = hex;
-      var handled = false;
-
-      this.onAllSysex(hex);
-
-      for (let listener of this.sysexListeners) {
-        if (listener(hex))
-          return;
-      }
-
-      if (!handled)
-        this.onUnhandledSysex(hex);
-    });
+    midiIn.setSysexCallback(hex => this.processSysex(hex));
   }
 
   /** Sends a sysex message immediately. */
@@ -261,7 +234,6 @@ class DeviceSysex extends SysexBase {
 
   public prefix: string;
   public suffix: string;
-  public mostRecentlyReceived: string = "";
 
   constructor(public midi: MidiPair, prefix: string = '', suffix: string = '') {
     super();
@@ -270,13 +242,8 @@ class DeviceSysex extends SysexBase {
     var deviceMatch = new RegExp(this.prefix + "([0-9a-f]+)" + this.suffix, "i");
     midi.registerListener(hex => {
       const matched = hex.match(deviceMatch);
-      if (matched && matched.length == 2) {
-        this.mostRecentlyReceived = matched[1];
-        for (let listener of this.sysexListeners) {
-          if (listener(matched[1]))
-            return true;
-        }
-      }
+      if (matched && matched.length == 2)
+        return this.processSysex(matched[1]);
       return false;
     });
   }
