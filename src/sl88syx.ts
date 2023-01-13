@@ -46,7 +46,7 @@ namespace SL {
 
 
     /** Patches a simply class to behave as a SYSEX message class, with hex, from, toStirng nad toHex methods  */
-    function sysexify<T extends new (...args: any) => any>(target: T, ...args: (string | codec)[]) {
+    function auto<T extends new (...args: any) => any>(target: T, ...args: (string | codec)[]) {
 
         const regx = new RegExp("^" + args.map(a => typeof a === 'string' ? a : a[0]).join("") + "$", "i");
         const pnames = target.toString().match(/function [^(]+\(([^)]*)\)/)![1].split(", ").map(s => s.trim()).filter(s => s)
@@ -73,8 +73,17 @@ namespace SL {
             }
         }
         all_decoders.push(t.from);
-    }
 
+        type fixed<T extends new (...args: any) => any> =
+            T extends abstract new (...args: infer P) => infer R ?
+            new (...args: P) => R & { toString(): string, toHex(): string }
+            : never
+
+        return target as unknown as fixed<T> & {
+            hex: T extends abstract new (...args: infer P) => any ? (...args: P) => string : never
+            from: (hex: string) => InstanceType<T>
+        };
+    }
 
     /** List of all SYSEX handlers which try_decode() could return */
     export const all_decoders: ((hex: string) => any)[] = [];
@@ -347,84 +356,34 @@ namespace SL {
     }
 
     // Message Classes:
-    export class ProgramDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public programNo: number, public program: Program) { }
-    }
-    sysexify(ProgramDump, "01", word, optional("0002"), program_codec, ignore);
-
-
-    export class ProgramParam {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const ProgramDump = auto(class ProgramDump {
+        constructor(public programNo: number, public program: Program) { } 
+    }, "01", word, optional("0002"), program_codec, ignore);
+    
+    export const ProgramParam = auto(class ProgramParam {
         constructor(public offset: number, public length: number, public data: number[]) { }
         toString = () => Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
-    }
-    sysexify(ProgramParam, "02", word, byte, words());
+    }, "02", word, byte, words());
 
-    export class GroupDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const GroupDump = auto(class GroupDump {
         constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean) { }
-    }
-    sysexify(GroupDump, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", ignore);
+    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", ignore);
 
-    export class GroupOrder {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public groupIndices: number[]) { }
-    };
-    sysexify(GroupOrder, "0455000000", words(12), ignore);
-    export class RecallProgram {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public programNo: number) { }
-    };
-    sysexify(RecallProgram, "06", word);
-    export class StoreProgram {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public programNo: number) { }
-    };
-    sysexify(StoreProgram, "09", word);
-    export class ProgramName {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public programNo: number, public name: string) { }
-    };
-    sysexify(ProgramName, "0a", word, ascii(15));
-    export class SetMode2 {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public param: number, public value1: number) { }
-    };
-    sysexify(SetMode2, "08", byte, byte);
+    export const GroupOrder = auto(class GroupOrder { constructor(public groupIndices: number[]) { } }, "0455000000", words(12), ignore);
 
-    export class WhiteBlackBalance {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const WhiteBlackBalance = auto(class WhiteBlackBalance {
         constructor(/** 3706 - 4505 */ public white_keys: number, /**3687 - 4506 */ public black_keys: number) { }
-    }
-    sysexify(WhiteBlackBalance, "0800", word, word);
+    }, "0800", word, word);
 
-    export class SetKeyBalance {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const SetKeyBalance = auto(class SetKeyBalance {
         constructor(/** 0-87 */ public key: number, /** 2867 (+30%) to 5326 (-30%)*/ public balance: number) { }
-    }
-    sysexify(SetKeyBalance, "0801", byte, "01", word);
+    }, "0801", byte, "01", word);
 
-    export class SetKeyBalances {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const SetKeyBalances = auto(class SetKeyBalances {
         constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { }
-    }
-    sysexify(SetKeyBalances, "0801", byte, byte, words());
+    }, "0801", byte, byte, words());
 
-    export class GetVelocityCurve {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
+    export const VelocityCurve = auto(class GetVelocityCurve {
         constructor(
             public curveNo: number,
             public type: VelocityCurveType,
@@ -432,78 +391,54 @@ namespace SL {
             public x30IfLast: number,
             public xy_points: number[], // 7f01 (0xff) - off
             public velocities: number[]) { }
-    }
-    sysexify(GetVelocityCurve, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127), ignore);
+    }, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127), ignore);
 
-    export class GlobalTranspose {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public value: number) { }
-    }
-    sysexify(GlobalTranspose, "0501", byte);
-    export class GlobalPedalMode {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public value: number) { }
-    }
-    sysexify(GlobalPedalMode, "0502", byte);
-    export class GlobalCommonChannel {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public value: number) { }
-    }
-    sysexify(GlobalCommonChannel, "0503", byte);
-    export class InitiateConnection {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(InitiateConnection, "000500");
-    export class ConfirmConnection {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(ConfirmConnection, "05001100");
-    export class CheckAttached {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(CheckAttached, "007f");
-    export class ConfirmAttached {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(ConfirmAttached, "7f");
-    export class EndOfDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(EndOfDump, "000a");
-    export class RequestProgramNameDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(RequestProgramNameDump, "0010");
-    export class EndOfProgramNameDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(EndOfProgramNameDump, "10");
-    export class BeginDumpIn {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(BeginDumpIn, "0011");
-    export class EndProgramDump {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-    }
-    sysexify(EndProgramDump, "11");
-    export class SetSessionMode {
-        static hex: () => string;
-        static from: (hex: string) => ProgramDump;
-        constructor(public param: number, public value: number) { }
-    }
-    sysexify(SetSessionMode, "05", byte, byte);
+    export const RecallProgram = auto(class RecallProgram { constructor(public programNo: number) { } }, "06", word);
+    export const StoreProgram = auto(class StoreProgram { constructor(public programNo: number) { } }, "09", word);
+    export const ProgramName = auto(class ProgramName { constructor(public programNo: number, public name: string) { } }, "0a", word, ascii(15));
+    export const SetMode2 = auto(class SetMode2 { constructor(public param: number, public value1: number) { } }, "08", byte, byte);
+
+
+    export const GlobalTranspose = auto(class GlobalTranspose { constructor(public value: number) { } }, "0501", byte);
+    export const GlobalPedalMode = auto(class GlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
+    export const GlobalCommonChannel = auto(class GlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
+    export const InitiateConnection = auto(class InitiateConnection { }, "000500");
+    export const ConfirmConnection = auto(class ConfirmConnection { }, "05001100");
+    export const CheckAttached = auto(class CheckAttached { }, "007f");
+    export const ConfirmAttached = auto(class ConfirmAttached { }, "7f");
+    export const EndOfDump = auto(class EndOfDump { }, "000a");
+    export const RequestProgramNameDump = auto(class RequestProgramNameDump { }, "0010");
+    export const EndOfProgramNameDump = auto(class EndOfProgramNameDump { }, "10");
+    export const BeginDumpIn = auto(class BeginDumpIn { }, "0011");
+    export const EndProgramDump = auto(class EndProgramDump { }, "11");
+    export const SetSessionMode = auto(class SetSessionMode { constructor(public param: number, public value: number) { } }, "05", byte, byte);
+
+    // Typeguard functions because typescript looses its mind if we export classes via a function.
+    export function isProgramDump(i : any) : i is InstanceType<typeof ProgramDump> { return i instanceof ProgramDump; }
+    export function isProgramParam(i : any) : i is InstanceType<typeof ProgramParam> { return i instanceof ProgramParam; }
+    export function isGroupDump(i : any) : i is InstanceType<typeof GroupDump> { return i instanceof GroupDump; }
+    export function isGroupOrder(i : any) : i is InstanceType<typeof GroupOrder> { return i instanceof GroupOrder; }
+    export function isWhiteBlackBalance(i : any) : i is InstanceType<typeof WhiteBlackBalance> {return i instanceof WhiteBlackBalance; }
+    export function isSetKeyBalance(i : any) : i is InstanceType<typeof SetKeyBalance> {return i instanceof SetKeyBalance; }
+    export function isSetKeyBalances(i : any) : i is InstanceType<typeof SetKeyBalances> {return i instanceof SetKeyBalances; }
+    export function isVelocityCurve(i : any) : i is InstanceType<typeof VelocityCurve> {return i instanceof VelocityCurve; }
+    export function isRecallProgram(i : any) : i is InstanceType<typeof RecallProgram> {return i instanceof RecallProgram; }
+    export function isStoreProgram(i : any) : i is InstanceType<typeof StoreProgram> {return i instanceof StoreProgram; }
+    export function isProgramName(i : any) : i is InstanceType<typeof ProgramName> {return i instanceof ProgramName; }
+    export function isSetMode2(i : any) : i is InstanceType<typeof SetMode2> {return i instanceof SetMode2; }
+    export function isGlobalTranspose(i : any) : i is InstanceType<typeof GlobalTranspose> {return i instanceof GlobalTranspose; }
+    export function isGlobalPedalMode(i : any) : i is InstanceType<typeof GlobalPedalMode> {return i instanceof GlobalPedalMode; }
+    export function isGlobalCommonChannel(i : any) : i is InstanceType<typeof GlobalCommonChannel> {return i instanceof GlobalCommonChannel; }
+    export function isInitiateConnection(i : any) : i is InstanceType<typeof InitiateConnection> {return i instanceof InitiateConnection; }
+    export function isConfirmConnection(i : any) : i is InstanceType<typeof ConfirmConnection> {return i instanceof ConfirmConnection; }
+    export function isCheckAttached(i : any) : i is InstanceType<typeof CheckAttached> {return i instanceof CheckAttached; }
+    export function isConfirmAttached(i : any) : i is InstanceType<typeof ConfirmAttached> {return i instanceof ConfirmAttached; }
+    export function isEndOfDump(i : any) : i is InstanceType<typeof EndOfDump> {return i instanceof EndOfDump; }
+    export function isRequestProgramNameDump(i : any) : i is InstanceType<typeof RequestProgramNameDump> {return i instanceof RequestProgramNameDump; }
+    export function isEndOfProgramNameDump(i : any) : i is InstanceType<typeof EndOfProgramNameDump> {return i instanceof EndOfProgramNameDump; }
+    export function isBeginDumpIn(i : any) : i is InstanceType<typeof BeginDumpIn> {return i instanceof BeginDumpIn; }
+    export function isEndProgramDump(i : any) : i is InstanceType<typeof EndProgramDump> {return i instanceof EndProgramDump; }
+    export function isSetSessionMode(i : any) : i is InstanceType<typeof SetSessionMode> {return i instanceof SetSessionMode; }
 }
 
 
@@ -538,25 +473,24 @@ class SL88API {
                 println('unknown: ' + this.device.mostRecentlyReceived);
                 break;
             }
-            if (r instanceof SL.ProgramName) {
+            if (SL.isProgramName(r)) {
                 println(`${r.programNo} - ` + r.toString());
                 results[r.programNo] = r.name;
             }
-            else if (r instanceof SL.RecallProgram) {
+            else if (SL.isRecallProgram(r)) {
                 println(r.toString());
             }
-            else if (r instanceof SL.SetMode2) {
+            else if (SL.isSetMode2(r)) {
                 println(r.toString());
-                // println(`setMode2 ${r.param} ${r.value1} ${r.value2}`);
             }
-            else if (r instanceof SL.ProgramDump) {
+            else if (SL.isProgramDump(r)) {                
                 println('Got program data! :D');
                 println(`program ${r.programNo} : ${r.program}`)
             }
-            else if (r instanceof SL.VelocityCurve) {
+            else if (SL.isVelocityCurve(r)) {
                 println(r.toString());
             }
-            else if (r instanceof SL.SetSessionMode) {
+            else if (SL.isSetSessionMode(r)) {
                 println(r.toString());
             }
             else {
