@@ -47,7 +47,6 @@ function init() {
   slDevice.onUnhandledSysex = hex => println('sl88 unhandled: ' + hex);
   slapi = new SL88API(slDevice);
 
-
   var app = new MidiPair("App", host.getMidiInPort(1), host.getMidiOutPort(1));
   var appDevice = new SL.SLDevice(app);
   appDevice.registerListener(makeListener(' APP'));

@@ -223,7 +223,7 @@ namespace SL {
                 set: function (this: Program, value: any) { this.setData(0x01, 0xe, string2unicodes(value, 0x0e)); }
             });
 
-            function define<K>(name: keyof Zone, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {
+            function define<K>(name: keyof Zone, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {                
                 [0, 1, 2, 3].forEach(i => {
                     Program.propertyMap[offset + (i * length)] = `zone ${1 + i}.${name}`;
                     Program.propertyDecoder[offset + (i * length)] = v => String(decode(v));
@@ -353,7 +353,7 @@ namespace SL {
         constructor(public offset: number, public length: number, public data: number[]) { }
         toString = () => Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
     }, "02", word, byte, words());
-
+    
     export const RecallProgram = auto(class RecallProgram { constructor(public programNo: number) { } }, "06", word);
     export const StoreProgram = auto(class StoreProgram { constructor(public programNo: number) { } }, "09", word);
     export const ProgramName = auto(class ProgramName { constructor(public programNo: number, public name: string) { } }, "0a", word, ascii(15));
@@ -371,11 +371,11 @@ namespace SL {
         constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { }
     }, "0801", byte, byte, words());
 
-    export const SetGlobalTranspose = auto(class SetGlobalTranspose { constructor(public value: number) { } }, "0501", byte);
-    export const SetGlobalPedalMode = auto(class SetGlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
-    export const SetGlobalCommonChannel = auto(class SetGlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
+    export const GlobalTranspose = auto(class GlobalTranspose { constructor(public value: number) { } }, "0501", byte);
+    export const GlobalPedalMode = auto(class GlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
+    export const GlobalCommonChannel = auto(class GlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
     export const InitiateConnection = auto(class InitiateConnection { }, "000500");
-    export const InitiateConnectionReply = auto(class InitiateConnectionReply { }, "05001100");
+    export const ConfirmConnection = auto(class ConfirmConnection { }, "05001100");
     export const CheckAttached = auto(class CheckAttached { }, "007f");
     export const ConfirmAttached = auto(class ConfirmAttached { }, "7f");
     export const EndOfDump = auto(class EndOfDump { }, "000a");

@@ -21,60 +21,65 @@ The sequnce is:
 | App / Host          |      SL 88                                   |
 |---------------------|----------------------------------------------|
 | Request Config Dump |                                              |
-|                     |  program Name 0                                |
-|                     |  program Name 1                                |
-|                     |  program Name 2                                |
-|                     |  ... (programes 3-249)                         |
-|                     |  program Name 249                              |
-|                     |  program Dump (active program)                   |
-|                     |  Recall program (tells _which_ program is active)|
-|                     |  White Black Balance                         |
-|                     |  Velocity Curve 0 (Normal)                   |
-|                     |  Velocity Curve 1 (Soft)                     |
-|                     |  Velocity Curve 2 (Hard)                     |
-|                     |  ... (Curves 3-7)                            |
-|                     |  Velocity Curve 8 (User 6)                   |
-|                     |  Velocity Scale                              |
-|                     |  Global Transpose                            |
-|                     |  Global Pedal Mode                           |
-|                     |  Global Common Channel                       |
-|                     |  End Of Config Dump                          |
+|                     |  [program name](#program-name) 0             |
+|                     |  [program name](#program-name) 1             |
+|                     |  [program name](#program-name) 2             |
+|                     |  ... (programs 3-249)                        |
+|                     |  [program name](#program-name) 249           |
+|                     |  [program dump (active program)](#program-dump) |
+|                     |  [recall program (says _which_ program is active)](#recall-program)|
+|                     |  [White Black Balance](#white-black-balance) |
+|                     |  [Velocity Curve 0 (Normal)](#velocity-curve)|
+|                     |  [Velocity Curve 1 (Soft)](#velocity-curve)  |
+|                     |  [Velocity Curve 2 (Hard)](#velocity-curve)  |
+|                     |  ... (curves 3-7)                            |
+|                     |  [Velocity Curve 8 (User 6)](#velocity-curve)|
+|                     |  [Velocity Scale](#key-scale-velocity)       |
+|                     |  [Global Transpose](#global-transpose)       |
+|                     |  [Global Pedal Mode](#global-pedal-mode)     |
+|                     |  [Global Common Channel](#global-common-channel)                       |
+|                     |  [End Of Config Dump](#end-of-config-dump)   |
 
 
 ## Program Dump
 The SL Editor's program organizer allows you to "Sync In" or "Sync Out" all of the program and group configuration data.
 Both the sync in and sync out sequences are identical, with the only difference being whether it is the app or the sl88 which provides the details of the programs and groups. The Sync In sequence is:
-| App / Host           |      SL 88               |
-|----------------------|--------------------------|
-| Request Program Dump |                          |
-|                      |  program 0               |
-|                      |  program 1               |
-|                      |  program 2               |
-|                      |  ... (programs 3-249)    |
-|                      |  program 249             |
-|                      |  group 0                 |
-|                      |  group 1                 |
-|                      |  group 2                 |
-|                      |  ... groups (3-6)        |
-|                      |  group 7                 |
-|                      |  group order             |
-|                      |  End Of Program Dump     |
+| App / Host                                  |      SL 88                                   |
+|---------------------------------------------|----------------------------------------------|
+| [Begin Full Dump](#begin-full-dump) |                                              |
+|                                             |  [program 0](#program-dump)                  |
+|                                             |  [program 1](#program-dump)                  |
+|                                             |  [program 2](#program-dump)                  |
+|                                             |  ... (programs 3-249)                        |
+|                                             |  [program 249](#program-dump)                |
+|                                             |  [group 0](#group-data)                      |
+|                                             |  [group 1](#group-data)                      |
+|                                             |  [group 2](#group-data)                      |
+|                                             |  ... groups (3-6)                            |
+|                                             |  [group 7](#group-data)                      |
+|                                             |  [group order](#group-order)                 |
+|                                             |  [End Of Full Dump](#end-of-full-dump)   |
 
 The Sync Out sequence is:
-| App / Host                 |      SL 88          |
-|----------------------------|---------------------|
-| program 0                  |    -                |
-| program 1                  |    -                |
-| program 2                  |    -                |
-| ... (programes 3-249)      |    -                |
-| program 249                |    -                |
-| group order                |    -                |
-| group 0                    |    -                |
-| group 1                    |    -                |
-| group 2                    |    -                |
-| ... groups (3-6)           |    -                |
-| group 7                    |    -                |
-| End Of Program Dump        |    -                |
+| App / Host                 |      SL 88                           |
+|----------------------------|--------------------------------------|
+| [program 0](#program-data) |    -                                 |
+| [program 1](#program-data) |    -                                 |
+| [program 2](#program-data) |    -                                 |
+| ... (programes 3-249)      |    -                                 |
+| [program 249](#program-data) |    -                                |
+| [group order](#group-order)|    -                                 |
+| [group 0](#group-data)     |    -                                 |
+| [group 1](#group-data)     |    -                                 |
+| [group 2](#group-data)     |    -                                 |
+| ... groups (3-6)           |    -                                 |
+| [group 7](#group-data)     |    -                                 |
+| [End Of Full Dump](#end-of-full-dump)|    -                                 |
+|                            |  [program name](#program-name) 0     |
+|                            |  [program name](#program-name) 1     |
+|                            |  [program name](#program-name) 2     |
+|                            |  ... (programes 3-249)               |
+|                            |  [program name](#program-name) 249   |
 
 When the App transmits an end of program dump message, the SL88 responds by re-transmitting all program names.
 
@@ -106,118 +111,279 @@ Notes:
 
 The following table shows the messages and their corresponding hex sequences. The hex sequences are decomposed vertically for legibility, and represent a contiguous sequence of bytes, with hexadecimal values being literal. 
 
-| Message            |  HEX SEQUENCE                     | Variables                                                                                  |
-|--------------------|-----------------------------------|-----------------------------------------------------------------------------------------------------|
-| White Black Balance |  0800<br>WWWW<br>LLLL                    |(literal)<br>Word, white key balance<br>Word, black key balance.                                 |
-| Key Scale Velocity  |  0801<br>KK<br>NN<br>LLLL LLLL... LLLL   |(literal)<br>Byte, first key to map (0-87)<br>Byte, number of keys (size of array)<br>Array, elements scale velocity for each keys.  |
-| Velocity Curve      |  0700<br>VV<br>TT<br>NN00 NN00 NN00 NN00 NN00 NN00 NN00 NN00 NN00 0000<br>0000 or 0300<br>XXXXYYYY...XXXXYYYY<br>0000<br>VVVV...VVVV<br>NN (received only)|(literal)<br>Byte. Velocity Curve Number (0-8)<br>Type (Factory=0000, User=5500)<br>Curve Name, Unicode(10)<br>Oddity: Literal 0300 for curve 8, 0000 for all others.<br>Array of 16 (X,Y) control points, with 255,255 (7f017f01) representing "no control point"<br>(literal)<br>Array of 127 velocity values mapping input pressure to output velovity<br>Checksum received from SL88, but never transmitted to it.|
-| Global Transpose | 0501<br>TT | (literal)<br>Byte - transpose amount (-12 to +12 as 0..24),  12 = no transpose |
-| Global Pedal Mode | 0502<br>TT | (literal)<br>Byte |
-| Global Common Channel | 0503<br>TT | (literal)<br>Byte: Common Midi Channel Number |
-| Group | 03<br>GG<br>5500<br>NN00 NN00 ... NN00 0000<br>IIII ... IIII<br><br><br>0200 or 0000<br>0000<br>QQ (optional checksum, receive only)|(literal)<br>Byte: Group Number (0-7)<br>(literal)<br>Group Name, Unicode(15)<br>Array (30) of word pairs:<br> word 1) Index of program at this position in group<br> word 2) 0000 if slot is active, else 7f01 to hide.<br>0200 is group active, else 0000<br>(literal)<br>Byte checksum, never transmitted.|
-| Group Ordering | 0455000000<br>IIII ... IIII<br>17 (receive only)| (literal)<br>Index of group<br>Checksum? Receive only, never transmitted|
-| Begin Session? | 05 ||
-| Initiate Connection |000500 ||
-| Initiate Connection Reply | 05001100 ||
-| Is Editor Attached? | 007f ||
-| Confirm Editor Attached |7f ||
-| Begin Full Dump  |0011 ||
-| End Of Full Dump |11 ||
-| Request Config Dump| 0010 ||
-| End Of Config Dump| 10 ||
-| End Of Dump| 000a ||
-| Recall program #     |  06<br>PPPP (Word)                             |(literal)<br>program Number 0-249                                                                      |
-| Store To program #   |  09 <br>PPPP (Word)                             |(literal)<br>program Number 0-249                                                                     |
-| program Name         |  0A<br>PPPP (Word)<br>NNNNNNNNNNNNNNNNNNNNNNNNNNNNNN                             |(literal)<br>program Number 0-249       <br>A15 (15 byte ASCII) Name of program                                |
-| program Data from SL88         |  01<br>AA<br>0002<br>program_DATA<br>MM (Checksum?)       | (literal)<br>program Number (0-249)<br>(literal)<br>program Data (see notes below)<br>Byte: Checksum value?                               |
-| program Data to SL88         |  01<br>AA<br>program_DATA                                   | (literal)<br>program Number (0-249)<br>program Data (see notes below)                               |
-| Alter Live program  | 02<br>NNNN<br>SS<br>PPPP .... PPPP    | (literal)<br>program Nmber (0-249)<br>Byte Offset of Values to Alter<br>Array of Word: Values to alter.  |
+# Known Messages
+## Request Config Dump
+Send by the host, this message requests a [configuration dump](#configuration-dump) from the SL88.
+
+| Sysex (hex) &darr;                |
+|-----------------------------------|
+| 0010                              |
+
+## End of Config Dump
+Send by the SL88 or host once all messages in a [configuration dump](#configuration-dump) have been sent.
+
+| Sysex (hex) &darr;                |
+|-----------------------------------|
+| 10                                |
+
+## Program Name
+The program name message is only ever sent from the SL88 to the host in respont to a config dump request.
+Each message describes the name of a single program.
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 0A                                | literal            |                                                                    |
+| PPPP                              | word               | program number 0-249                                               |
+| AAAAAAAAAAAAAAA                   | ascii - 15 bytes   | name of program                                                    |
 
 
-# program Data
-To Be completed.
-Until this document has been completed, please refer to sl88syx.ts for details on structures and enumerations used. 
+## Program Data
+This message contains all data related to a singe program.
+
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 01                                | literal            |                                                                    |
+| PPPP                              | word               | program number 0-249                                               |
+| 0002                              | literal            |                                                                    |
+| ...                               | array(256)         | [program payload](#program-payload-layout)                         |
+| XX                                | byte               | Checksum?  How this is calculated has not been determined          |
+
+### Program Payload Layout
+Each program payload consists of a name and 4 zones, all encoded as an array of 256 word values.
+Many array elements in the payload _appear_ to be unused, and are not described here. All unused elements should have a value of 0 (zero).
+
+The program name is the only non zone-specific value, appearing at offset 1:
+
+| Element               | Offset    | Length  |   Notes                                                                              | 
+|-----------------------|-----------|---------|--------------------------------------------------------------------------------------|
+| Program Name          | 1         | 0xe     |                                                                                      |
+
+After this, the zoned values are inter-woven such that for any one setting, the values for all 4 zones are contiguous in the payload.
+The table below details each per-zone setting, the offset of that setting within the overall program payload (i.e. the array index), and the number of elements (length) used for the setting.
+The headings Z1-4 denote the offset for each respective zone.
+
+| Element               | Z1  |  Z2 |  Z3 |  Z4 | Length|   Notes                                                        | 
+|-----------------------|-----|-----|-----|-----|-------|----------------------------------------------------------------|
+| instrument            |  24 |  36 |  48 |  60 | 12    | character codes of null terminated string: zone instrument name|
+| sound                 |  72 |  83 |  94 | 105 | 11    | character codes of null terminated string: zone sound name     |
+| enabled               | 116 | 117 | 118 | 119 | 1     | 0=Disabled, 1=Off, 2=On                                        |
+| midi channel          | 124 | 125 | 126 | 127 | 1     | 0-15 zone midi transmit channel                                |
+| midi port             | 120 | 121 | 122 | 123 | 1     | 0=USB, 1=Midi1, 2=Midi2, 3=Bluetooth                           |
+| volume                | 128 | 129 | 130 | 131 | 1     | 0-127=midi volume value (CC 7)<br>255=Off                      |
+| program change        | 132 | 133 | 134 | 135 | 1     | 0-127=program change<br>255=Off                                |
+| Bank MSB              | 136 | 137 | 138 | 139 | 1     | 0-127=Bank MSB (CC 00)<br>255=Off                              |
+| Bank LSB              | 140 | 141 | 142 | 143 | 1     | 0-127=Bank LSB (CC 32)<br>255=Off                              |
+| lowKey                | 144 | 145 | 146 | 147 | 1     | 0-127=lowest key to transmit for zone                          |
+| highKey               | 148 | 149 | 150 | 151 | 1     | 0-127=highest key to transmit for zone                         |
+| curve type            | 152 | 153 | 154 | 155 | 1     | See [curve type](#curve-type)                                  |
+| lowVel                | 156 | 157 | 158 | 159 | 1     | 0-127=lowest velocity to transmit for zone                     |
+| highVel               | 160 | 161 | 162 | 163 | 1     | 0-127=highest velocity to transmit for zone                    |
+| octave                | 164 | 165 | 166 | 167 | 1     | 0-7=Zone octave offset +3<br>Calculated as: octave=n-3         |
+| transpose             | 168 | 169 | 170 | 171 | 1     | 0-24=Zone transpose<br>Calculated as: transpose=n-12           |
+| aftertouch            | 172 | 173 | 174 | 175 | 1     | 1=on, 0=off                                                    |
+| fixed velocity        | 176 | 177 | 178 | 179 | 1     | Fixed velocity value of zone if curve type & 0x80 > 1          |
+| stick 1 X             | 180 | 181 | 182 | 183 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| stick 1 Y             | 184 | 185 | 186 | 187 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| stick 2 X             | 188 | 189 | 190 | 191 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| stick 2 Y             | 192 | 193 | 194 | 195 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| stick 3 X             | 196 | 197 | 198 | 199 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| stick 3 Y             | 200 | 201 | 202 | 203 | 1     | 0=Off, 1=Pitch Bend, 2=Aftertouch, <br> else midi CC=N-2       |
+| pedal 1               | 208 | 209 | 210 | 211 | 1     | 0=Off, 1=Aftertouch, else midi CC=N-1                          |
+| pedal 2               | 212 | 213 | 214 | 215 | 1     | 0=Off, 1=Aftertouch, else midi CC=N-1                          |
+| pedal 3               | 216 | 217 | 218 | 219 | 1     | 0=Off, 1=Aftertouch, else midi CC=N-1                          |
+| pedal 4               | 220 | 221 | 222 | 223 | 1     | 0=Off, 1=Aftertouch, else midi CC=N-1                          |
+
+### Curve Type
+Each zone can use a different velocity curve, and which velocity curve type is active is defined by a 1-byte bit-array of flags:
+| Bits  | Meaning                                                             |
+|-------|---------------------------------------------------------------------|
+| 0-1   | 2-bit value N - Selected factory curve: 0=Linear, 1=Hill, 2=Ramp    |
+| 2-4   | 3-bit value N - selected user curve 1-6 as curve=N-1                |
+|   5   | 0=Use selected factory curve, 1=Use selected user cruve             |
+|   6   | 1=Ignore curve and use fixed velocity value, 0=use curve            |
 
 
-```ts
+## Send Program to SL88
+The message for sending program data to the SL88 is _almost_ identical to receiving it:
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 01                                | literal            |                                                                    |
+| PPPP                              | word               | program number 0-249                                               |
+| ...                               | array(256)         | [program payload](#program-payload-layout)                         |
+| XX                                | byte               | Checksum?  How this is calculated has not been determined          |
 
-    
-    program {
-            unicode("instrument", 0x18, 0xc);
-            unicode("sound", 0x48, 0xb);
-            choiceOf("enabled", 0x74, ZoneModeMap);
-            word("midiChannel", 0x7c);
-            choiceOf("midiPort", 0x78, ZoneMidiPortMap);
-            wordOrOff("volume", 0x80);
-            wordOrOff("programChange", 0x84);
-            wordOrOff("MSB", 0x88);
-            wordOrOff("LSB", 0x8c);
-            word("lowKey", 0x90);
-            word("highKey", 0x94);
-            word("lowVel", 0x9c);
-            word("highVel", 0xa0);
-            word("octave", 0xa4, 3, -3, 3);
-            word("transpose", 0xa8, 12, -12, 12);
-            word("afterTouch", 0xac);
-            choiceOf("stick1X", 0xb4, StickAssign);
-            choiceOf("stick1Y", 0xb8, StickAssign);
-            choiceOf("stick2X", 0xbc, StickAssign);
-            choiceOf("stick2Y", 0xc0, StickAssign);
-            choiceOf("stick3X", 0xc4, StickAssign);
-            choiceOf("stick3Y", 0xc8, StickAssign);
-            choiceOf("pedal1", 0xd0, PedalAssign);
-            choiceOf("pedal2", 0xd4, PedalAssign);
-            choiceOf("pedal3", 0xd8, PedalAssign);
-            choiceOf("pedal4", 0xdc, PedalAssign);
-            // choiceOf("curveType", 0x98, ZoneCurveType2);
-            word("fixedVelocity", 0xb0);
+Note that both the checksum and the literal 0002 are absent when transmitting a program.
+This message _writes_ a program in persisted storage.
 
-            define("curveType", 0x98, 1,
-                vals => {
-                    var v = vals[0];
-                    if (v & 0x80) v &= 0x80;
-                    else if (v & 0x40) v &= 0x5c;
-                    else v &= 3;
-                    return choiceKey(ZoneCurveType2, v);
-                },
-                x => [ZoneCurveType2[x]]);
-        }
-        getter: DataGetter;
-        name!: string;
-        zones: Zone[];
+## Recall Program
+Stored programs can be activated (loaded into RAM) using the recall program message:
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 06                                | literal            |                                                                    |
+| PPPP                              | word               | program number 0-249                                               |
 
-    }
+## Alter Active Program
+Individual parts of the active program can be altered on the fly using this message, with change reflected on the SL88 immediately.
+The message effectively writes to an offset in RAM, and thus a clear understanding of the [program layout](#program-payload-layout) is important because the offsets listed in the [program layout](#program-payload-layout) are the same offsets used in this message to alter part of the active program.
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 02                                | literal            |                                                                    |
+| TT                                | word               | offset into RAM at which to write array                            |
+| SS                                | byte               | length of array (number of elements) to write                      |
+| YYYY,YYYY...YYYY                  | array              | array of word values to write to RAM                               |
 
-    export class Zone {
-        sound!: string;
-        instrument!: string;
-        enabled!: keyof typeof ZoneModeMap;
-        midiPort!: keyof typeof ZoneMidiPortMap;
-        volume!: number;
-        midiChannel!: number;
-        programChange!: number;
-        MSB!: number;
-        LSB!: number;
-        lowKey!: number;
-        highKey!: number;
-        lowVel!: number;
-        highVel!: number;
-        octave!: number;
-        transpose!: number;
-        afterTouch!: number;
-        stick1X!: keyof typeof StickAssign;
-        stick1Y!: keyof typeof StickAssign;
-        stick2X!: keyof typeof StickAssign;
-        stick2Y!: keyof typeof StickAssign;
-        stick3X!: keyof typeof StickAssign;
-        stick3Y!: keyof typeof StickAssign;
-        pedal1!: keyof typeof PedalAssign;
-        pedal2!: keyof typeof PedalAssign;
-        pedal3!: keyof typeof PedalAssign;
-        pedal4!: keyof typeof PedalAssign;
-        curveType!: keyof typeof ZoneCurveType2;
-        fixedVelocity!: number;
-    };
-
-
+#### Examples:
+1. Alter the program name to "PROGRAM 1":
+```hex
+02 01 0e 5000 5200 4F00 4700 5200 4100 4D00 2000 3100 0000
+         P    R    O    G    R    A    M         1    null
 ```
+2. Enabling Zone 2:  
+Sets a single value at offset 0x75 (117) to '2' (enabled)
+```hex
+02 75 01 0200
+```
+
+## Store Program
+The currently active program can be stored to a program slot using this message:
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 09                                | literal            |                                                                    |
+| PPPP                              | word               | program number 0-249                                               |
+
+
+## Group Data
+The SL88 allows programs to be organized into groups, so that during performances those programs can be easily selected.
+Each Group is effectively just a group name and a series of program indices. 
+
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 03                                | literal            |                                                                    |   
+| GG                                | byte               | Group number 0-7                                                   |
+| 5500                              | literal            |                                                                    |
+| NN00 NN00 ... NN00 0000           | unicode(15)        | Group Name as null terminated unicode string                       |     
+| IIII,XXXX ... IIII,XXXX           | array(60)          | 30 Pairs of values:<br>IIII: Index of program<br>XXXX: 0=Active, 255=Not used | 
+| TTTT                              | word               | 2=active, 0=not configured                                         |  
+| 0000                              | literal            |                                                                    | 
+| QQ                                | byte               | Checksum? Received only, never sent to SL88                        |
+
+To clarity the indices:
+- There are 30 program slots per group.
+- Each program slot is configured by two words (shown above as IIII and XXXX):
+   - Even words (IIII) are program indexes. 
+   - Odd words (XXXX) indicate whether the slot is in use.
+- When a slot is used (program IIII should appear in that slot),  (XXXX) should be 0 (zero).
+- When a slot is unused (no program should appear), the is active flag (XXXX) should be 0 (zero).
+
+## Group Order
+This message describes / configures the order of the 8 program groups within in the list of all groups:
+| Sysex (hex) &darr;                | Type               | Notes                                                              |
+|-----------------------------------|--------------------|--------------------------------------------------------------------|
+| 0455000000                        | literal            |                                                                    |
+| GGGG GGGG GGGG ... GGGG           | array(8)           | List of group indices                                              |
+| 17                                | literal            | Checksum? Receive only, never transmitted                          |
+
+
+## Velocity Curve
+| Sysex (hex) &darr;                                  | Type                | Notes                                             |
+|-----------------------------------------------------|---------------------|---------------------------------------------------|
+| 0700                                                | literal             |                                                   |
+| VV                                                  | Byte                | Velocity Curve Number (0-8)                       |
+| TT                                                  | Word                | Type (Factory=0000, User=5500)                    | 
+| NN00 NN00 NN00 NN00 NN00 NN00 NN00 NN00 NN00 0000   | Unicode(10)         | Curve Name                                        |
+| 0000 or 0300                                        | literal             | Oddity: 0300 for curve 8, 0000 for all others     |
+| XXXX YYYY XXXX YYYY... XXXX YYYY                    | array(32)           | 16 X,Y  curve control points.  255,255 is "off"   |
+| 0000                                                | literal             | (forces velocity 0 to be key off. See below)      | 
+| VVVV VVVV VVVV ... VVVV                             | array(127)          | velocity translation table                        |
+| NN (received only)                                  | literal             | Checksum? Receive only, never transmitted         |
+  
+The control-point array seems to be solely for the SL editor's benefit and is not observed by the SL88. 
+The velocity translation table is used to translate physical velocities into reported velocities. 
+The velocity (1-127) is used as an indexer to lookup the value to report from the velocity translation table array.
+Velocity value 0 is _always_ 0/off, hence the arry size of 127 instead of 128.
+
+
+## White Black Balance
+Configures the balancing of reported velocity between back keys and white keys.
+Not much is understood about the eact values being used here:
+| Sysex (hex) &darr;  | Type    | Notes                                             |
+|---------------------|---------|---------------------------------------------------|
+| 0800                | literal |                                                   |
+| WWWW                | word    | White key balance. 867 (+30%) to 5326 (-30%)      |
+| LLLL                | word    | black key balance. 867 (+30%) to 5326 (-30%)      |                   
+
+
+## Key Scale Velocity
+| Sysex (hex) &darr;  | Type    | Notes                                                                        |
+|---------------------|---------|------------------------------------------------------------------------------|
+| 0801                | literal |                                                                              |
+| KK                  | byte    | first key to map (0-87)                                                      |
+| NN                  | byte    | 1 - 88 - size of array / number of keys                                      |
+| LLLL LLLL... LLLL   | array   | values scale key velocity for each keys from left to right. <br>Values in range 2867 (+30%) to 5326 (-30%)         |
+
+
+## Global Transpose 
+| Sysex (hex) &darr;  | Type    | Notes                                                                        |
+|---------------------|---------|------------------------------------------------------------------------------|
+| 0501                | literal | |
+| TT                  | byte    | 0-24 - Transpose amount calculates as N-12                                   |
+
+## Global Pedal Mode
+| Sysex (hex) &darr;  | Type    | Notes                                                                        |
+|---------------------|---------|------------------------------------------------------------------------------|
+| 0502                | literal |                                                                              |
+| TT                  | byte    |                                                                              |
+
+## Global Common Channel
+| Sysex (hex) &darr;  | Type    | Notes                                                                        |
+|---------------------|---------|------------------------------------------------------------------------------|
+| 0503                | literal |                                                                              |
+| TT                  | byte    | 0-15 -  Common Midi Channel Number |
+
+
+## Initiate Connection
+Not sure about this message, but the SL editor sends this message to the SL88 upon connection.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 000500              |
+
+## Initiate Connection Reply 
+Not sure about this message, but the SL88 replies to the editor with this message in repsonse to [initiate connection](#initiate-connection)
+| Sysex (hex) &darr;  |
+|---------------------|
+| 05001100 |
+
+## Editor Attached
+This message is sent every 2 seconds by the App, and this causes the SL88 to show "use editor" when the control knob is turned.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 007f                |
+
+## Confirm Editor Attached 
+This message is sent by the SL88 in response to the [editor attached](#editor-attached) message.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 7f                  |
+
+## Begin Full Dump  
+This message triggers a [full dump](#program-dump) of all program, group and veocity data from the SL88.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 0011                |
+
+## End Of Full Dump 
+This message indicates the conclusion of a [full dump](#program-dump)
+| Sysex (hex) &darr;  |
+|---------------------|
+| 11 |
+
+## End Of Dump
+Note sure about this one, but has been seen in the wild.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 000a                |
+
+## Begin Session
+Note sure about this one, but has been seen in the wild.
+| Sysex (hex) &darr;  |
+|---------------------|
+| 05                  |
