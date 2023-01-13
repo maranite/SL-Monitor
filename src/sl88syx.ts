@@ -39,14 +39,8 @@ namespace SL {
         return [c[0], decode, encode];
     }
 
-    /** Registers a POJO and associates it with a SYSEX message format */
-    function register<
-        Y extends Base,
-        T extends new (...args: any[]) => Y,
-        ENC = T extends new (...args: infer P) => any ? (...args: P) => string : never
-    >
-        (target: T, ...args: (string | codec)[]) {
-
+    /** Patches a simply class to behave as a SYSEX message class, with hex, from, toStirng nad toHex methods  */
+    function auto<T extends new (...args: any) => any>(target: T, ...args: (string | codec)[]) {
         const regx = new RegExp("^" + args.map(a => typeof a === 'string' ? a : a[0]).join("") + "$", "i");
         const pnames = target.toString().match(/function [^(]+\(([^)]*)\)/)![1].split(", ").map(s => s.trim()).filter(s => s)
         const codecs: codec[] = args.filter(a => typeof a !== 'string') as codec[];
@@ -54,88 +48,31 @@ namespace SL {
             const r = pnames.slice(0);
             return args.map((a, i) => typeof a === 'string' ? a : a[2](this[r.shift()!])).join("");
         }
-        if (target.prototype.toString === Base.prototype.toString)
-            target.prototype.toString = function (this: any) {
-                return `${target.name} ${pnames.map(p => `${p}=${this[p]}`).join(", ")}`;
-            }
-
-        const encode = (...args2: any[]) => {
-            return args.map(a => typeof a === 'string' ? a : a[2](args2.shift())).join("");
-        };
-
-        const decode = (hex: string) => {
-            var match = hex.match(regx);
-            if (match) {
-                if (!pnames.length)
-                    return new target();
-                try {
-                    const rest = match.slice(1).map((r, i) => codecs[i][1](r));
-                    // println(JSON.stringify(rest));
-                    return new target(...rest);
-                } catch (e) {
-                    println(`problem with ${target.name}: ${e}`);
-                    println(`hex is ${hex};`);
-                    const [_, ...rest] = match;
-                    rest.forEach((r, i) => println(`match ${i} is ${r}`))
-                }
-            }
-        }
-
-        all_decoders.push(decode);
-        return [encode, decode] as [ENC, (hex: string) => InstanceType<T>];
-    }
-
-
-    function hack<Y extends Base,
-        T extends new (...args: any[]) => Y,
-        ENC = T extends new (...args: infer P) => any ? (...args: P) => string : never
-    >(target: T, ...args: (string | codec)[]) {
-
-        const regx = new RegExp("^" + args.map(a => typeof a === 'string' ? a : a[0]).join("") + "$", "i");
-        const pnames = target.toString().match(/function [^(]+\(([^)]*)\)/)![1].split(", ").map(s => s.trim()).filter(s => s)
-        const codecs: codec[] = args.filter(a => typeof a !== 'string') as codec[];
-        target.prototype.toHex = function (this: any) {
-            const r = pnames.slice(0);
-            return args.map((a, i) => typeof a === 'string' ? a : a[2](this[r.shift()!])).join("");
-        }
-        if (target.prototype.toString === Base.prototype.toString)
-            target.prototype.toString = function (this: any) {
-                return `${target.name} ${pnames.map(p => `${p}=${this[p]}`).join(", ")}`;
-            }
+        if (target.prototype.toString === Object.prototype.toString)
+            target.prototype.toString = function (this: any) { return `${target.name} ${pnames.map(p => `${p}=${this[p]}`).join(", ")}`; }
 
         const t = target as any;
-        t.encode = (...args2: any[]) => args.map(a => typeof a === 'string' ? a : a[2](args2.shift())).join("");
-        t.decode = (hex: string) => {
+        t.hex = (...args2: any[]) => args.map(a => typeof a === 'string' ? a : a[2](args2.shift())).join("");
+        t.from = (hex: string) => {
             var match = hex.match(regx);
             if (match) {
                 if (!pnames.length)
                     return new target();
-                return new target(...match.slice(1).map((r, i) => codecs[i][1](r)));                
+                return new target(...match.slice(1).map((r, i) => codecs[i][1](r)));
             }
         }
-        all_decoders.push(t.decode);
-        return target as T & {
-            encode: ConstuctorLike<T, string>
-            decode: (hex: string) => InstanceType<T>
+        all_decoders.push(t.from);
+
+        type fixed<T extends new (...args: any) => any> =
+            T extends abstract new (...args: infer P) => infer R ?
+            new (...args: P) => R & { toString(): string, toHex(): string }
+            : never
+
+        return target as unknown as fixed<T> & {
+            hex: T extends abstract new (...args: infer P) => any ? (...args: P) => string : never//ConstuctorLike<T, string>
+            from: (hex: string) => InstanceType<T>
         };
     }
-
-    type ConstuctorLike<T extends abstract new (...args: any) => any, R> =
-        T extends abstract new (...args: infer P) => infer Q ? (...args: P) => R : never;
-
-    function dudee<T extends abstract new (...args: any) => any>(cls: T) {
-        return cls as T & {
-            encode: ConstuctorLike<T, string>
-            decode: (hex: string) => InstanceType<T>
-        };
-    }
-    export const TTT = dudee(class A {
-        constructor(fuck: string) { }
-    });
-    const r = new TTT("me");
-    TTT.encode("me");
-    TTT.decode("sdsd")
-
 
 
     /** List of all SYSEX handlers which try_decode() could return */
@@ -159,7 +96,7 @@ namespace SL {
         setData(offset: number, length: number, value: number[]): void {
             for (let i = 0; i < length; i++)
                 this.data[offset + i] = (i < value.length) ? value[i] : 0;
-            this.device?.send(SL.programParamHex(offset, length, value));
+            this.device?.send(SL.ProgramParam.hex(offset, length, value));
         }
     }
 
@@ -275,7 +212,7 @@ namespace SL {
         private setData(offset: number, length: number, value: number[]): void {
             for (let i = 0; i < length; i++)
                 this.data[offset + i] = (i < value.length) ? value[i] : 0;
-            this.device?.send(programParamHex(offset, length, value));
+            this.device?.send(ProgramParam.hex(offset, length, value));
         }
 
         static {
@@ -408,104 +345,56 @@ namespace SL {
         active!: boolean;
     }
 
-    class Base {
-        toHex() { return ""; }
-        toString() { return ""; }
-    }
 
-    export class ProgramIn extends Base { constructor(public programNo: number, public program: Program, public checksum: number) { super() } }
-    export const [programInHex, toProgramIn] = register(ProgramIn, "01", word, "0002", program_codec, byte);
+    export const ProgramIn = auto(class ProgramIn { constructor(public programNo: number, public program: Program, public checksum: number) { } }, "01", word, "0002", program_codec, byte);
+    export const ProgramOut = auto(class ProgramOut { constructor(public programNo: number, public program: Program) { } }, "01", word, program_codec);
 
-    export class ProgramOut extends Base { constructor(public programNo: number, public program: Program) { super() } };
-    export const [programOutHex, toProgramOut] = register(ProgramOut, "01", word, program_codec);
+    export const ProgramParam = auto(class ProgramParam {
+        constructor(public offset: number, public length: number, public data: number[]) { }
+        toString = () => Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
+    }, "02", word, byte, words());
 
-    export class ProgramParam extends Base {
-        constructor(public offset: number, public length: number, public data: number[]) { super() }
-        toString() {
-            return Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
-        }
-    };
-    export const [programParamHex, toProgramParam] = register(ProgramParam, "02", word, byte, words());
+    export const RecallProgram = auto(class RecallProgram { constructor(public programNo: number) { } }, "06", word);
+    export const StoreProgram = auto(class StoreProgram { constructor(public programNo: number) { } }, "09", word);
+    export const ProgramName = auto(class ProgramName { constructor(public programNo: number, public name: string) { } }, "0a", word, ascii(15));
+    export const SetMode2 = auto(class SetMode2 { constructor(public param: number, public value1: number) { } }, "08", byte, byte);
 
-    export class RecallProgram extends Base { constructor(public programNo: number) { super() } };
-    export const [recallProgramHex, toRecallProgram] = register(RecallProgram, "06", word);
+    export const SetWhiteBlackBalance = auto(class SetWhiteBlackBalance {
+        constructor(/** 3706 - 4505 */ public white_keys: number, /**3687 - 4506 */ public black_keys: number) { }
+    }, "0800", word, word);
 
-    export class StoreProgram extends Base { constructor(public programNo: number) { super() } };
-    export const [storeProgramHex, toStoreProgram] = register(StoreProgram, "09", word);
+    export const SetKeyBalance = auto(class SetKeyBalance {
+        constructor(/** 0-87 */ public key: number, /** 2867 (+30%) to 5326 (-30%)*/ public balance: number) { }
+    }, "0801", byte, "01", word);
 
-    export class ProgramName extends Base { constructor(public programNo: number, public name: string) { super() } };
-    export const [programNameHex, toProgramName] = register(ProgramName, "0a", word, ascii(15));
+    export const SetKeyBalances = auto(class SetKeyBalances {
+        constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { }
+    }, "0801", byte, byte, words());
 
-    export class SetMode2 extends Base { constructor(public param: number, public value1: number) { super() } };
-    export const [setMode2Hex, toSetMode2] = register(SetMode2, "08", byte, byte);
+    export const SetGlobalTranspose = auto(class SetGlobalTranspose { constructor(public value: number) { } }, "0501", byte);
+    export const SetGlobalPedalMode = auto(class SetGlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
+    export const SetGlobalCommonChannel = auto(class SetGlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
+    export const InitiateConnection = auto(class InitiateConnection { }, "000500");
+    export const InitiateConnectionReply = auto(class InitiateConnectionReply { }, "05001100");
+    export const CheckAttached = auto(class CheckAttached { }, "007f");
+    export const ConfirmAttached = auto(class ConfirmAttached { }, "7f");
+    export const EndOfDump = auto(class EndOfDump { }, "000a");
+    export const RequestProgramNameDump = auto(class RequestProgramNameDump { }, "0010");
+    export const EndOfProgramNameDump = auto(class EndOfProgramNameDump { }, "10");
+    export const BeginDumpIn = auto(class BeginDumpIn { }, "0011");
+    export const EndProgramDump = auto(class EndProgramDump { }, "11");
+    export const SetSessionMode = auto(class SetSessionMode { constructor(public param: number, public value: number) { } }, "05", byte, byte);
+    export const GroupOrderIn = auto(class GroupOrderIn { constructor(public groupIndices: number[]) { } }, "0455000000", words(12), "17");
+    export const GroupOrder = auto(class GroupOrder { constructor(public groupIndices: number[]) { } }, "0455000000", words(12));
+    export const GroupDumpIn = auto(class GroupDumpIn {
+        constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean, public checksum: number) { }
+    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", byte);
 
-    export class SetWhiteBlackBalance extends Base {
-        constructor(/** 3706 - 4505 */ public white_keys: number, /**3687 - 4506 */ public black_keys: number) { super() }
-    };
-    export const [setWhiteBlackBalanceHex, toWhiteBlackBalance] = register(SetWhiteBlackBalance, "0800", word, word);
+    export const SetGroup = auto(class SetGroup {
+        constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean) { }
+    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200", "0000"), "0000");
 
-    export class SetKeyBalance extends Base {
-        constructor(/** 0-87 */ public key: number, /** 2867 (+30%) to 5326 (-30%)*/ public balance: number) { super() }
-    };
-    export const [setKeyBalanceHex, toKeyBalance] = register(SetKeyBalance, "0801", byte, "01", word);
-
-    export class SetKeyBalances extends Base {
-        constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { super() }
-    };
-    export const [setKeyBalancesHex, toSetKeyBalances] = register(SetKeyBalances, "0801", byte, byte, words());
-
-    export class SetGlobalTranspose extends Base { constructor(public value: number) { super() } };
-    export const [setGlobalTransposeHex, toSetGlobalTranspose] = register(SetGlobalTranspose, "0501", byte);
-
-    export class SetGlobalPedalMode extends Base { constructor(public value: number) { super() } };
-    export const [setGlobalPedalModeHex, toSetGlobalPedalMode] = register(SetGlobalPedalMode, "0502", byte);
-
-    export class SetGlobalCommonChannel extends Base { constructor(public value: number) { super() } };
-    export const [setGlobalCommonChannelHex, toSetGlobalCommonChannel] = register(SetGlobalCommonChannel, "0503", byte);
-
-    export class InitiateConnection extends Base { constructor() { super() } };
-    export const [initiateConnectionHex, toInitiateConnection] = register(InitiateConnection, "000500");
-
-    export class InitiateConnectionReply extends Base { constructor() { super() } };
-    export const [initiateConnectionReplyHex, toInitiateConnectionReply] = register(InitiateConnectionReply, "05001100");
-
-    export class CheckAttached extends Base { constructor() { super() } };
-    export const [checkAttachedHex, toCheckAttached] = register(CheckAttached, "007f");
-
-    export class ConfirmAttached extends Base { constructor() { super() } };
-    export const [confirmAttachedHex, toConfirmAttached] = register(ConfirmAttached, "7f");
-
-    export class EndOfDump extends Base { constructor() { super() } };
-    export const [endOfDumpHex, toEndOfDump] = register(EndOfDump, "000a");
-
-    export class RequestProgramNameDump extends Base { constructor() { super() } };
-    export const [requestProgramNameDumpHex, toRequestProgramNameDump] = register(RequestProgramNameDump, "0010");
-
-    export class EndOfProgramNameDump extends Base { constructor() { super() } };
-    export const [endOfProgramNameDumpHex, toEndOfProgramNameDump] = register(EndOfProgramNameDump, "10");
-
-    export class BeginDumpIn extends Base { constructor() { super() } };
-    export const [beginDumpInHex, toBeginDumpIn] = register(BeginDumpIn, "0011");
-
-    export class EndProgramDump extends Base { constructor() { super() } };
-    export const [endOfProgramDumpHex, toEndProgramDump] = register(EndProgramDump, "11");
-
-    export class SetSessionMode extends Base { constructor(public param: number, public value: number) { super() } };
-    export const [setGlobalHex, toSetGlobal] = register(SetSessionMode, "05", byte, byte);
-
-    export class GroupOrderIn extends Base { constructor(public groupIndices: number[]) { super() } };
-    export const [groupOrderInHex, toGroupOrderIn] = register(GroupOrderIn, "0455000000", words(12), "17");
-
-    export class GroupOrder extends Base { constructor(public groupIndices: number[]) { super() } };
-    export const [groupOrderHex, toGroupOrder] = register(GroupOrder, "0455000000", words(12));
-
-    export class GroupDumpIn extends Base { constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean, public checksum: number) { super() } };
-    export const [groupDumpInHex, toGroupDumpIn] = register(GroupDumpIn, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", byte);
-
-    export class SetGroup extends Base { constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean) { super() } };
-    export const [setGroupHex, toSetGroup] = register(SetGroup, "03", byte, "5500", unicode(15), preset_indices, bool("0200", "0000"), "0000");
-
-    export class GetVelocityCurveDump extends Base {
+    export const GetVelocityCurveDump = auto(class GetVelocityCurveDump {
         constructor(
             public curveNo: number,
             public type: VelocityCurveType,
@@ -513,40 +402,22 @@ namespace SL {
             public x30IfLast: number,
             public xy_points: number[], // 7f01 (0xff) - off
             public velocities: number[],
-            public trailer: number) { super() }
-    };
-    export const [getVelocityCurveHexDump, toGetVelocityCurveDump] = register(GetVelocityCurveDump,
-        "0700",
-        byte,
-        choice(VelocityCurveTypeMap),
-        unicode(10),
-        word,
-        words(32),
-        "0000",
-        words(127),
-        byte);
+            public trailer: number) { }
+    }, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127), byte);
 
-    export class GetVelocityCurve extends Base {
+    export const GetVelocityCurve = auto(class GetVelocityCurve {
         constructor(
             public curveNo: number,
             public type: VelocityCurveType,
             public name: string,
             public x30IfLast: number,
             public xy_points: number[], // 7f01 (0xff) - off
-            public velocities: number[]) { super() }
-    };
-    export const [getVelocityCurveHex, toGetVelocityCurve] = register(GetVelocityCurve,
-        "0700",
-        byte,
-        choice(VelocityCurveTypeMap),
-        unicode(10),
-        word, //"0000", 
-        words(32),
-        "0000",
-        words(127));
+            public velocities: number[]) { }
+    }, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127));
 
-    export class SetVelocityCurve extends Base { constructor(public curveNo: number, public type: VelocityCurveType, public name: string, public unk: number, public points: number[], public velocities: number[]) { super() } };
-    export const [setVelocityCurveHex, toSetVelocityCurve] = register(SetVelocityCurve, "0701", byte, choice(VelocityCurveTypeMap), unicode(9), "000000000100", word, words(30), "0000", words(127));
+    export const SetVelocityCurve = auto(class SetVelocityCurve {
+        constructor(public curveNo: number, public type: VelocityCurveType, public name: string, public unk: number, public points: number[], public velocities: number[]) { }
+    }, "0701", byte, choice(VelocityCurveTypeMap), unicode(9), "000000000100", word, words(30), "0000", words(127));
 }
 
 
@@ -559,12 +430,12 @@ class SL88API {
     }
 
     writeProgram(programNo: number, program: SL.Program) {
-        const hex = SL.programOutHex(programNo, program);
+        const hex = SL.ProgramOut.hex(programNo, program);
         this.device.send(hex);
     }
 
     async loadProgram(programNo: number = 16383) {
-        var r = await this.device.requestObjectAsync(SL.recallProgramHex(programNo), SL.toProgramIn);
+        var r = await this.device.requestObjectAsync(SL.RecallProgram.hex(programNo), SL.ProgramIn.from);
         println(`program received : ${r.programNo}`);
         println(r.program.name);
         println(JSON.stringify(r.program));

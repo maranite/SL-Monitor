@@ -26,7 +26,7 @@ function makeListener(name: string) {
       if (r instanceof SL.CheckAttached || r instanceof SL.ConfirmAttached)
         return true;
 
-      if (r instanceof SL.ProgramIn 
+      if (r instanceof SL.ProgramIn
         || r instanceof SL.ProgramOut
         || r instanceof SL.ProgramName)
         return true;
@@ -55,9 +55,6 @@ function init() {
 
   sl88.onAllSysex = hex => app.send(hex);
   app.onAllSysex = hex => sl88.send(hex);
-  if(app instanceof SL.TTT) {
-    
-  }
 }
 
 function exit() { }
