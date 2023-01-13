@@ -13,7 +13,7 @@ SL88 sysex messages take the form:
 ```hex
 F0 00201a00 [MESSAGE] F7
 ```
-...where 00201a00 is the manufacturer and device preamble. The remainder of this document describes hex sequences which appear in place of _MESSAGE_ shown above. For example, the [request config dump](#request-config-dump) message specifies that hex ```0010``` needs to be sent, 
+...where ```00201a00``` is the manufacturer and device preamble. The remainder of this document describes hex sequences which appear in place of _MESSAGE_ shown above. For example, the [request config dump](#request-config-dump) message specifies that hex ```0010``` needs to be sent, 
 so the resulting full sysex message to transmit to the SL88 would be:
 ```
 F0 00201a00 0010 F7
