@@ -26,11 +26,15 @@ Several common variable value encodings exist, and are denoted in the sysex mess
 | Byte    | 1 byte:  (as-is) in the range 0 to 127  (x0-x7F)                                                     |
 | Word    | 2 bytes: 7-bit LSB MSB form:  0 = 0000, 1 = 0100, 127 = 7F00,  128 = 0001, 255 = 7F01                |
 | Array   | A sequence of words, such that 1,2,127,255 = 0100 0200 7f00 7f01                                     |
-| ASCII   | A sequence of Byte representing a null-terminated ASCII string, null padded to their full length     |
+| ASCII   | A sequence of bytes representing a null-terminated ASCII string, null padded to their full length    |
+| unicode | A sequence of words, where each word is a character code in a null-terminated (and padded) string    |
 
-Note:  It is common for the value 255 to mean "Off" for values that would ordinarily fit into the 0-127 range, for example a [program zone's](#program-payload-layout) Volume, Program Change, LSB and MSB settings.
+Notes:  
+- It is common for the value 255 to mean "Off" for values that would ordinarily fit into the 0-127 range, for example a [program zone's](#program-payload-layout) Volume, Program Change, LSB and MSB settings.
+- Strings must always be padded to their specified length. For example the string ```PROGRAM 1``` is encoded as:
+   - ASCII(12):  ```50 52 4F 47 52 41 4D 20 31 00 00 00```    (note the trailing nulls to bring the byte length to 12)
+   - UNICODE(12): ```5000 5200 4F00 4700 5200 4100 4D00 2000 3100 0000 0000 0000``` (note the trailing nulls to bring the word length to 12)
 
-The following table shows the messages and their corresponding hex sequences. The hex sequences are decomposed vertically for legibility, and represent a contiguous sequence of bytes, with hexadecimal values being literal. 
 
 # SYSEX MESSAGE REFERENCE
 
