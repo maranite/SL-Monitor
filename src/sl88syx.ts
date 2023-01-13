@@ -4,31 +4,36 @@ namespace SL {
         constructor(midi: MidiPair) { super(midi, "00201a00", ""); }
     }
 
-    type codec = [rx: string, decode: (hex: string) => any, encode: (data: any) => string];
+    type codec = [rx: string, decode: (hex: string) => any, encode: (data: any) => string, captures: boolean];
     function custom<T>(decode: (hex: string) => T, encode: (value: T) => string, length: number = 2): codec {
-        return [`([0-9a-f]{${2 * length}})`, hex2array, array2hex]
+        return [`([0-9a-f]{${2 * length}})`, hex2array, array2hex, true]
     }
-    const raw = (length: number): codec => [`([0-9a-f]{${4 * length}})`, s => s, s => s];
-    const byte: codec = [`([0-9a-f]{2})`, hex2byte, byte2hex];
-    const word: codec = [`([0-9a-f]{4})`, hex2word, word2hex];
-    const ascii = (length: number): codec => [`([0-9a-f]{${2 * length}})`, hex2ascii, s => ascii2hex(s, length)];
-    const unicode = (length: number): codec => [`([0-9a-f]{${4 * length}})`, hex2unicode, s => unicode2hex(s, length)];
+    const raw = (length: number): codec => [`([0-9a-f]{${4 * length}})`, s => s, s => s, true];
+    const byte: codec = [`([0-9a-f]{2})`, hex2byte, byte2hex, true];
+    const word: codec = [`([0-9a-f]{4})`, hex2word, word2hex, true];
+    const ascii = (length: number): codec => [`([0-9a-f]{${2 * length}})`, hex2ascii, s => ascii2hex(s, length), true];
+    const unicode = (length: number): codec => [`([0-9a-f]{${4 * length}})`, hex2unicode, s => unicode2hex(s, length), true];
     const words = (length: number = 0): codec => length ?
-        [`([0-9a-f]{${4 * length}})`, hex2array, s => array2hex(s, length)] :
-        [`([0-9a-f]+)`, hex2array, array2hex];
+        [`([0-9a-f]{${4 * length}})`, hex2array, s => array2hex(s, length), true] :
+        [`([0-9a-f]+)`, hex2array, array2hex, true];
 
     const bool = (on: string = "5500", off: string = "0000"): codec => [
         `(${on}|${off})`,
         hex => (hex == on ? true : hex == off ? false : undefined),
-        val => val ? on : off];
+        val => val ? on : off,
+        true];
+
+    const ignore: codec = [`(?:[0-9a-f]{2}|)`, null as any, null as any, false];
+    const optional = (hex: string): codec => [`(?:${hex}|)`, null as any, null as any, false];
 
     const preset_indices: codec = [
         `([0-9a-f]{240})`,
         hex => hex2array(hex).filter((e, i, a) => (i % 2 == 0) && a[i + 1] == 0),
-        num => num.map((n: number) => word2hex(n) + "0000").join("").padEnd(240, "7f017f01")
+        num => num.map((n: number) => word2hex(n) + "0000").join("").padEnd(240, "7f017f01"),
+        true
     ];
 
-    const program_codec: codec = [`([0-9a-f]{${4 * 256}})`, hex => new Program(hex2array(hex)), (p: Program) => array2hex(p.data, 256)];
+    const program_codec: codec = [`([0-9a-f]{${4 * 256}})`, hex => new Program(hex2array(hex)), (p: Program) => array2hex(p.data, 256), true];
 
     function choice<T extends { [s: string]: number }>(instance: T, length: 1 | 2 = 2): codec {
         var c = length === 2 ? word : byte;
@@ -36,23 +41,29 @@ namespace SL {
         Object.entries(instance).forEach(([k, v]) => map[c[2](v)] = k);
         const decode = (hex: string) => map[hex] ?? c[2](hex);
         const encode = (value: keyof T) => c[2](instance[value])
-        return [c[0], decode, encode];
+        return [c[0], decode, encode, true];
     }
 
+
     /** Patches a simply class to behave as a SYSEX message class, with hex, from, toStirng nad toHex methods  */
-    function auto<T extends new (...args: any) => any>(target: T, ...args: (string | codec)[]) {
+    function sysexify<T extends new (...args: any) => any>(target: T, ...args: (string | codec)[]) {
+
         const regx = new RegExp("^" + args.map(a => typeof a === 'string' ? a : a[0]).join("") + "$", "i");
         const pnames = target.toString().match(/function [^(]+\(([^)]*)\)/)![1].split(", ").map(s => s.trim()).filter(s => s)
-        const codecs: codec[] = args.filter(a => typeof a !== 'string') as codec[];
+        const codecs: codec[] = args.filter(a => typeof a !== 'string' && a[3]) as codec[];
+
         target.prototype.toHex = function (this: any) {
             const r = pnames.slice(0);
-            return args.map((a, i) => typeof a === 'string' ? a : a[2](this[r.shift()!])).join("");
+            return args.map(a => typeof a === 'string' ? a : a[3] ? a[2](this[r.shift()!]) : "").join("");
         }
+
         if (target.prototype.toString === Object.prototype.toString)
             target.prototype.toString = function (this: any) { return `${target.name} ${pnames.map(p => `${p}=${this[p]}`).join(", ")}`; }
 
         const t = target as any;
-        t.hex = (...args2: any[]) => args.map(a => typeof a === 'string' ? a : a[2](args2.shift())).join("");
+
+        t.hex = (...args2: any[]) => args.map(a => typeof a === 'string' ? a : a[3] ? a[2](args2.shift()) : "").join("");
+
         t.from = (hex: string) => {
             var match = hex.match(regx);
             if (match) {
@@ -62,16 +73,6 @@ namespace SL {
             }
         }
         all_decoders.push(t.from);
-
-        type fixed<T extends new (...args: any) => any> =
-            T extends abstract new (...args: infer P) => infer R ?
-            new (...args: P) => R & { toString(): string, toHex(): string }
-            : never
-
-        return target as unknown as fixed<T> & {
-            hex: T extends abstract new (...args: infer P) => any ? (...args: P) => string : never//ConstuctorLike<T, string>
-            from: (hex: string) => InstanceType<T>
-        };
     }
 
 
@@ -223,7 +224,7 @@ namespace SL {
                 set: function (this: Program, value: any) { this.setData(0x01, 0xe, string2unicodes(value, 0x0e)); }
             });
 
-            function define<K>(name: keyof Zone, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {                
+            function define<K>(name: keyof Zone, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {
                 [0, 1, 2, 3].forEach(i => {
                     Program.propertyMap[offset + (i * length)] = `zone ${1 + i}.${name}`;
                     Program.propertyDecoder[offset + (i * length)] = v => String(decode(v));
@@ -304,18 +305,18 @@ namespace SL {
         zones: Zone[];
 
         toString() {
-            return [`Program: ${this.name}: `, ...this.zones.filter(z => z.enabled !== 'Disabled').map(z => z.toString())].join("\r\n");
+            return [`Program: ${this.name}: `, ...this.zones.filter(z => z.enabled !== 'Disabled').map(z => z.toString())].join(" ");
         }
     }
 
-    export class ProgramSet {
+    export class Group {
         static template: number[] = [...string2unicodes("-----------", 11), 0, 0, ...Array(30 * 2).fill(255), 0, 0];
 
         static {
-            function define<K>(name: keyof ProgramSet, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {
-                Object.defineProperty(ProgramSet.prototype, name, {
-                    get: function (this: ProgramSet) { return decode(this.getter.getData(offset, length)) },
-                    set: function (this: ProgramSet, value: any) { this.getter.setData(offset, length, encode(value)); }
+            function define<K>(name: keyof Group, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {
+                Object.defineProperty(Group.prototype, name, {
+                    get: function (this: Group) { return decode(this.getter.getData(offset, length)) },
+                    set: function (this: Group, value: any) { this.getter.setData(offset, length, encode(value)); }
                 });
             }
 
@@ -345,67 +346,85 @@ namespace SL {
         active!: boolean;
     }
 
+    // Message Classes:
+    export class ProgramDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public programNo: number, public program: Program) { }
+    }
+    sysexify(ProgramDump, "01", word, optional("0002"), program_codec, ignore);
 
-    export const ProgramIn = auto(class ProgramIn { constructor(public programNo: number, public program: Program, public checksum: number) { } }, "01", word, "0002", program_codec, byte);
-    export const ProgramOut = auto(class ProgramOut { constructor(public programNo: number, public program: Program) { } }, "01", word, program_codec);
 
-    export const ProgramParam = auto(class ProgramParam {
+    export class ProgramParam {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
         constructor(public offset: number, public length: number, public data: number[]) { }
         toString = () => Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
-    }, "02", word, byte, words());
-    
-    export const RecallProgram = auto(class RecallProgram { constructor(public programNo: number) { } }, "06", word);
-    export const StoreProgram = auto(class StoreProgram { constructor(public programNo: number) { } }, "09", word);
-    export const ProgramName = auto(class ProgramName { constructor(public programNo: number, public name: string) { } }, "0a", word, ascii(15));
-    export const SetMode2 = auto(class SetMode2 { constructor(public param: number, public value1: number) { } }, "08", byte, byte);
+    }
+    sysexify(ProgramParam, "02", word, byte, words());
 
-    export const SetWhiteBlackBalance = auto(class SetWhiteBlackBalance {
-        constructor(/** 3706 - 4505 */ public white_keys: number, /**3687 - 4506 */ public black_keys: number) { }
-    }, "0800", word, word);
-
-    export const SetKeyBalance = auto(class SetKeyBalance {
-        constructor(/** 0-87 */ public key: number, /** 2867 (+30%) to 5326 (-30%)*/ public balance: number) { }
-    }, "0801", byte, "01", word);
-
-    export const SetKeyBalances = auto(class SetKeyBalances {
-        constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { }
-    }, "0801", byte, byte, words());
-
-    export const GlobalTranspose = auto(class GlobalTranspose { constructor(public value: number) { } }, "0501", byte);
-    export const GlobalPedalMode = auto(class GlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
-    export const GlobalCommonChannel = auto(class GlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
-    export const InitiateConnection = auto(class InitiateConnection { }, "000500");
-    export const ConfirmConnection = auto(class ConfirmConnection { }, "05001100");
-    export const CheckAttached = auto(class CheckAttached { }, "007f");
-    export const ConfirmAttached = auto(class ConfirmAttached { }, "7f");
-    export const EndOfDump = auto(class EndOfDump { }, "000a");
-    export const RequestProgramNameDump = auto(class RequestProgramNameDump { }, "0010");
-    export const EndOfProgramNameDump = auto(class EndOfProgramNameDump { }, "10");
-    export const BeginDumpIn = auto(class BeginDumpIn { }, "0011");
-    export const EndProgramDump = auto(class EndProgramDump { }, "11");
-    export const SetSessionMode = auto(class SetSessionMode { constructor(public param: number, public value: number) { } }, "05", byte, byte);
-    export const GroupOrderIn = auto(class GroupOrderIn { constructor(public groupIndices: number[]) { } }, "0455000000", words(12), "17");
-    export const GroupOrder = auto(class GroupOrder { constructor(public groupIndices: number[]) { } }, "0455000000", words(12));
-    export const GroupDumpIn = auto(class GroupDumpIn {
-        constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean, public checksum: number) { }
-    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", byte);
-
-    export const SetGroup = auto(class SetGroup {
+    export class GroupDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
         constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean) { }
-    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200", "0000"), "0000");
+    }
+    sysexify(GroupDump, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", ignore);
 
-    export const GetVelocityCurveDump = auto(class GetVelocityCurveDump {
-        constructor(
-            public curveNo: number,
-            public type: VelocityCurveType,
-            public name: string,
-            public x30IfLast: number,
-            public xy_points: number[], // 7f01 (0xff) - off
-            public velocities: number[],
-            public trailer: number) { }
-    }, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127), byte);
+    export class GroupOrder {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public groupIndices: number[]) { }
+    };
+    sysexify(GroupOrder, "0455000000", words(12), ignore);
+    export class RecallProgram {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public programNo: number) { }
+    };
+    sysexify(RecallProgram, "06", word);
+    export class StoreProgram {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public programNo: number) { }
+    };
+    sysexify(StoreProgram, "09", word);
+    export class ProgramName {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public programNo: number, public name: string) { }
+    };
+    sysexify(ProgramName, "0a", word, ascii(15));
+    export class SetMode2 {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public param: number, public value1: number) { }
+    };
+    sysexify(SetMode2, "08", byte, byte);
 
-    export const GetVelocityCurve = auto(class GetVelocityCurve {
+    export class WhiteBlackBalance {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(/** 3706 - 4505 */ public white_keys: number, /**3687 - 4506 */ public black_keys: number) { }
+    }
+    sysexify(WhiteBlackBalance, "0800", word, word);
+
+    export class SetKeyBalance {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(/** 0-87 */ public key: number, /** 2867 (+30%) to 5326 (-30%)*/ public balance: number) { }
+    }
+    sysexify(SetKeyBalance, "0801", byte, "01", word);
+
+    export class SetKeyBalances {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(/** key number 0 - 88  */ public first_key: number, /** number of elements in balances */public number_of_keys: number,/** 2867 (+30%) to 5326 (-30%)*/public balances: number[]) { }
+    }
+    sysexify(SetKeyBalances, "0801", byte, byte, words());
+
+    export class GetVelocityCurve {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
         constructor(
             public curveNo: number,
             public type: VelocityCurveType,
@@ -413,16 +432,83 @@ namespace SL {
             public x30IfLast: number,
             public xy_points: number[], // 7f01 (0xff) - off
             public velocities: number[]) { }
-    }, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127));
+    }
+    sysexify(GetVelocityCurve, "0700", byte, choice(VelocityCurveTypeMap), unicode(10), word, words(32), "0000", words(127), ignore);
 
-    export const SetVelocityCurve = auto(class SetVelocityCurve {
-        constructor(public curveNo: number, public type: VelocityCurveType, public name: string, public unk: number, public points: number[], public velocities: number[]) { }
-    }, "0701", byte, choice(VelocityCurveTypeMap), unicode(9), "000000000100", word, words(30), "0000", words(127));
+    export class GlobalTranspose {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public value: number) { }
+    }
+    sysexify(GlobalTranspose, "0501", byte);
+    export class GlobalPedalMode {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public value: number) { }
+    }
+    sysexify(GlobalPedalMode, "0502", byte);
+    export class GlobalCommonChannel {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public value: number) { }
+    }
+    sysexify(GlobalCommonChannel, "0503", byte);
+    export class InitiateConnection {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(InitiateConnection, "000500");
+    export class ConfirmConnection {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(ConfirmConnection, "05001100");
+    export class CheckAttached {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(CheckAttached, "007f");
+    export class ConfirmAttached {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(ConfirmAttached, "7f");
+    export class EndOfDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(EndOfDump, "000a");
+    export class RequestProgramNameDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(RequestProgramNameDump, "0010");
+    export class EndOfProgramNameDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(EndOfProgramNameDump, "10");
+    export class BeginDumpIn {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(BeginDumpIn, "0011");
+    export class EndProgramDump {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+    }
+    sysexify(EndProgramDump, "11");
+    export class SetSessionMode {
+        static hex: () => string;
+        static from: (hex: string) => ProgramDump;
+        constructor(public param: number, public value: number) { }
+    }
+    sysexify(SetSessionMode, "05", byte, byte);
 }
 
 
 class SL88API {
-
+    //TODO Build out the API
     device: SL.SLDevice;
 
     constructor(midi: SL.SLDevice | MidiPair) {
@@ -430,12 +516,12 @@ class SL88API {
     }
 
     writeProgram(programNo: number, program: SL.Program) {
-        const hex = SL.ProgramOut.hex(programNo, program);
+        const hex = SL.ProgramDump.hex(programNo, program);
         this.device.send(hex);
     }
 
     async loadProgram(programNo: number = 16383) {
-        var r = await this.device.requestObjectAsync(SL.RecallProgram.hex(programNo), SL.ProgramIn.from);
+        var r = await this.device.requestObjectAsync(SL.RecallProgram.hex(programNo), SL.ProgramDump.from);
         println(`program received : ${r.programNo}`);
         println(r.program.name);
         println(JSON.stringify(r.program));
@@ -463,11 +549,11 @@ class SL88API {
                 println(r.toString());
                 // println(`setMode2 ${r.param} ${r.value1} ${r.value2}`);
             }
-            else if (r instanceof SL.ProgramIn) {
+            else if (r instanceof SL.ProgramDump) {
                 println('Got program data! :D');
                 println(`program ${r.programNo} : ${r.program}`)
             }
-            else if (r instanceof SL.GetVelocityCurve) {
+            else if (r instanceof SL.VelocityCurve) {
                 println(r.toString());
             }
             else if (r instanceof SL.SetSessionMode) {
