@@ -23,8 +23,14 @@ function makeListener(name: string) {
   return (data: string) => {
     var r = SL.try_decode(data);
     if (r) {
-      if(r instanceof SL.CheckAttached || r instanceof SL.ConfirmAttached)
+      if (r instanceof SL.CheckAttached || r instanceof SL.ConfirmAttached)
         return true;
+
+      if (r instanceof SL.ProgramIn 
+        || r instanceof SL.ProgramOut
+        || r instanceof SL.ProgramName)
+        return true;
+
       println(`${name}: ` + r.toString());
       return true;
     }
@@ -32,15 +38,15 @@ function makeListener(name: string) {
   }
 }
 
-var slapi : SL88API;
+var slapi: SL88API;
 
 function init() {
   var sl88 = new MidiPair("SL88", host.getMidiInPort(0), host.getMidiOutPort(0));
   var slDevice = new SL.SLDevice(sl88);
   slDevice.registerListener(makeListener('SL88'));
-  slDevice.onUnhandledSysex = hex => println('sl88 unhandled: ' + hex);  
+  slDevice.onUnhandledSysex = hex => println('sl88 unhandled: ' + hex);
   slapi = new SL88API(slDevice);
-  
+
 
   var app = new MidiPair("App", host.getMidiInPort(1), host.getMidiOutPort(1));
   var appDevice = new SL.SLDevice(app);
@@ -49,6 +55,9 @@ function init() {
 
   sl88.onAllSysex = hex => app.send(hex);
   app.onAllSysex = hex => sl88.send(hex);
+  if(app instanceof SL.TTT) {
+    
+  }
 }
 
 function exit() { }

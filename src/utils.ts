@@ -258,9 +258,9 @@ class DeviceSysex extends SysexBase {
 
 /** Provides a map of standard Midi CC controls */
 const midiCC = {
-  /** Allows user to switch bank for patch selection. Program change used with Bank Select. MIDI can access 16,384 patches per MIDI channel. */
+  /** Allows user to switch bank for program selection. Program change used with Bank Select. MIDI can access 16,384 programes per MIDI channel. */
   bankSelect: 0,
-  /** Generally this CC controls a vibrato effect (pitch, loudness, brighness). What is modulated is based on the patch. */
+  /** Generally this CC controls a vibrato effect (pitch, loudness, brighness). What is modulated is based on the program. */
   modulation: 1,
   /** Oftentimes associated with aftertouch messages. It was originally intended for use with a breath MIDI  in which blowing harder produced higher MIDI control values. It can be used for modulation as well. */
   breath: 2,
@@ -274,11 +274,11 @@ const midiCC = {
   dataEntry: 6,
   /** Controls the volume of the channel. */
   channelVolume: 7,
-  /** Controls the left and right balance, generally for stereo patches. A value of 64 equals the center. */
+  /** Controls the left and right balance, generally for stereo programes. A value of 64 equals the center. */
   balance: 8,
   /** */
   cc09: 9,
-  /** Controls the left and right balance, generally for mono patches. A value of 64 equals the center. */
+  /** Controls the left and right balance, generally for mono programes. A value of 64 equals the center. */
   pan: 10,
   /** Expression is a percentage of volume (CC7). */
   expression: 11,
