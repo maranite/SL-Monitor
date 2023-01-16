@@ -148,14 +148,14 @@ namespace SL {
         User6: 0x54
     }
 
-    const StickAssign: { [x in ('off' | 'pitchbend' | 'aftertouch' | Exclude<keyof typeof midiCC, 'bankSelect'>)]: number } = {
+    const StickAssign: { [x in ('Off' | 'pitchbend' | 'aftertouch' | Exclude<keyof typeof midiCC, 'bankSelect'>)]: number } = {
         off: 0,
         pitchbend: 1,
         aftertouch: 2
     } as any;
 
 
-    const PedalAssign: { [x in ('off' | 'pitchbend' | Exclude<keyof typeof midiCC, 'bankSelect'>)]: number } = {
+    const PedalAssign: { [x in ('Off' | 'aftertouch' | Exclude<keyof typeof midiCC, 'bankSelect'>)]: number } = {
         off: 0,
         aftertouch: 1
     } as any;
@@ -171,24 +171,24 @@ namespace SL {
     }
 
     export class Zone {
-        constructor(public program: Program, public zone: number) { }
+        constructor(public readonly program: Program, public readonly zone: number) { }
 
         sound!: string;
         instrument!: string;
         enabled!: keyof typeof ZoneModeMap;
         midiPort!: keyof typeof ZoneMidiPortMap;
-        volume!: number;
+        volume!: numberOrOff;
         midiChannel!: number;
-        programChange!: number;
-        MSB!: number;
-        LSB!: number;
+        programChange!: numberOrOff;
+        MSB!: numberOrOff;
+        LSB!: numberOrOff;
         lowKey!: number;
         highKey!: number;
         lowVel!: number;
         highVel!: number;
         octave!: number;
         transpose!: number;
-        afterTouch!: number;
+        afterTouch!: boolean;
         stick1X!: keyof typeof StickAssign;
         stick1Y!: keyof typeof StickAssign;
         stick2X!: keyof typeof StickAssign;
@@ -210,8 +210,7 @@ namespace SL {
     export type numberOrOff = 'Off' | number
 
     export class Program {
-        static template: number[] = [85, 83, 76, 32, 56, 56, 32, 71, 82, 65, 78, 68, 0, 32, 32, 32, 0, 0, 0, 0, 0, 0, 0, 0, 73, 78, 83, 84, 82, 85, 77, 69, 78, 84, 0, 32, 73, 78, 83, 84, 82, 85, 77, 69, 78, 84, 0, 32, 73, 78, 83, 84, 82, 85, 77, 69, 78, 84, 0, 32, 73, 78, 83, 84, 82, 85, 77, 69, 78, 84, 0, 32, 83, 79, 85, 78, 68, 0, 32, 32, 32, 32, 32, 83, 79, 85, 78, 68, 0, 32, 32, 32, 32, 32, 83, 79, 85, 78, 68, 0, 32, 32, 32, 32, 32, 83, 79, 85, 78, 68, 0, 32, 32, 32, 32, 32, 2, 2, 2, 2, 0, 0, 1, 2, 0, 1, 0, 1, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 21, 21, 21, 108, 108, 108, 108, 0, 0, 0, 0, 127, 127, 127, 127, 1, 1, 1, 1, 3, 3, 3, 3, 12, 12, 12, 12, 1, 1, 1, 1, 100, 100, 100, 100, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 75, 75, 75, 75, 72, 72, 72, 72, 0, 0, 0, 0, 65, 65, 65, 65, 68, 68, 68, 68, 12, 12, 12, 12, 12, 12, 12, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-
+        static template: number[] = [85, 73, 78, 73, 84, 32, 80, 82, 79, 71, 82, 65, 77, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 21, 21, 21, 21, 108, 108, 108, 108, 64, 0, 0, 0, 0, 0, 0, 0, 127, 127, 127, 127, 3, 3, 3, 3, 12, 12, 12, 12, 1, 1, 1, 1, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 72, 0, 0, 0, 75, 0, 0, 0, 0, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         static propertyMap: Dict<string> = {};
         static propertyDecoder: { [offset: number]: (values: number[]) => string } = {};
 
@@ -279,7 +278,8 @@ namespace SL {
             word("highVel", 0xa0);
             word("octave", 0xa4, 3, -3, 3);
             word("transpose", 0xa8, 12, -12, 12);
-            word("afterTouch", 0xac);
+            define("afterTouch", 0xac, 1, v => v[0] ? true : false, v => [v ? 1 : 0]);
+            // word("afterTouch", 0xac);
             choiceOf("stick1X", 0xb4, StickAssign);
             choiceOf("stick1Y", 0xb8, StickAssign);
             choiceOf("stick2X", 0xbc, StickAssign);
@@ -304,6 +304,10 @@ namespace SL {
                 x => [ZoneCurveType2[x]]);
         }
 
+        static newDefault() {
+            return new Program(Program.template);
+        }
+
         constructor(public data: number[], public device?: SysexBase) {
             this.zones = [0, 1, 2, 3].map(i => new Zone(this, i));
             this.getter = new DataGetter(data);
@@ -319,7 +323,7 @@ namespace SL {
     }
 
     export class Group {
-        static template: number[] = [...string2unicodes("-----------", 11), 0, 0, ...Array(30 * 2).fill(255), 0, 0];
+        static template: number[] = [85, 73, 78, 73, 84, 32, 80, 82, 79, 71, 82, 65, 77, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 21, 21, 21, 21, 127, 127, 127, 127, 64, 0, 0, 0, 127, 127, 127, 127, 127, 127, 127, 127, 3, 3, 3, 3, 12, 12, 12, 12, 1, 1, 1, 1, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 72, 0, 0, 0, 75, 0, 0, 0, 0, 0, 0, 0, 65, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
         static {
             function define<K>(name: keyof Group, offset: number, length: number, decode: (x: number[]) => K, encode: (x: K) => number[]) {
@@ -344,7 +348,6 @@ namespace SL {
             define('active', 75, 1, n => n[0] == 2, n => [n ? 2 : 0]);
         }
 
-
         constructor(public data: number[],) {
             this.getter = new DataGetter(data);
         }
@@ -357,9 +360,9 @@ namespace SL {
 
     // Message Classes:
     export const ProgramDump = auto(class ProgramDump {
-        constructor(public programNo: number, public program: Program) { } 
+        constructor(public programNo: number, public program: Program) { }
     }, "01", word, optional("0002"), program_codec, ignore);
-    
+
     export const ProgramParam = auto(class ProgramParam {
         constructor(public offset: number, public length: number, public data: number[]) { }
         toString = () => Program.propertyMap[this.offset] + ' = ' + Program.propertyDecoder[this.offset]?.call(null, this.data);
@@ -367,7 +370,10 @@ namespace SL {
 
     export const GroupDump = auto(class GroupDump {
         constructor(public groupNo: number, public name: string, public programNumbers: number[], public isActive: boolean) { }
-    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200"), "0000", ignore);
+    }, "03", byte, "5500", unicode(15), preset_indices, bool("0200", "0000"), "0000", ignore);
+
+    // 03 00 5500 0000300030003000330030003000300033003000300030003300300000000000 00000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d00000002000000
+
 
     export const GroupOrder = auto(class GroupOrder { constructor(public groupIndices: number[]) { } }, "0455000000", words(12), ignore);
 
@@ -397,8 +403,6 @@ namespace SL {
     export const StoreProgram = auto(class StoreProgram { constructor(public programNo: number) { } }, "09", word);
     export const ProgramName = auto(class ProgramName { constructor(public programNo: number, public name: string) { } }, "0a", word, ascii(15));
     export const SetMode2 = auto(class SetMode2 { constructor(public param: number, public value1: number) { } }, "08", byte, byte);
-
-
     export const GlobalTranspose = auto(class GlobalTranspose { constructor(public value: number) { } }, "0501", byte);
     export const GlobalPedalMode = auto(class GlobalPedalMode { constructor(public value: number) { } }, "0502", byte);
     export const GlobalCommonChannel = auto(class GlobalCommonChannel { constructor(public value: number) { } }, "0503", byte);
@@ -414,31 +418,31 @@ namespace SL {
     export const SetSessionMode = auto(class SetSessionMode { constructor(public param: number, public value: number) { } }, "05", byte, byte);
 
     // Typeguard functions because typescript looses its mind if we export classes via a function.
-    export function isProgramDump(i : any) : i is InstanceType<typeof ProgramDump> { return i instanceof ProgramDump; }
-    export function isProgramParam(i : any) : i is InstanceType<typeof ProgramParam> { return i instanceof ProgramParam; }
-    export function isGroupDump(i : any) : i is InstanceType<typeof GroupDump> { return i instanceof GroupDump; }
-    export function isGroupOrder(i : any) : i is InstanceType<typeof GroupOrder> { return i instanceof GroupOrder; }
-    export function isWhiteBlackBalance(i : any) : i is InstanceType<typeof WhiteBlackBalance> {return i instanceof WhiteBlackBalance; }
-    export function isSetKeyBalance(i : any) : i is InstanceType<typeof SetKeyBalance> {return i instanceof SetKeyBalance; }
-    export function isSetKeyBalances(i : any) : i is InstanceType<typeof SetKeyBalances> {return i instanceof SetKeyBalances; }
-    export function isVelocityCurve(i : any) : i is InstanceType<typeof VelocityCurve> {return i instanceof VelocityCurve; }
-    export function isRecallProgram(i : any) : i is InstanceType<typeof RecallProgram> {return i instanceof RecallProgram; }
-    export function isStoreProgram(i : any) : i is InstanceType<typeof StoreProgram> {return i instanceof StoreProgram; }
-    export function isProgramName(i : any) : i is InstanceType<typeof ProgramName> {return i instanceof ProgramName; }
-    export function isSetMode2(i : any) : i is InstanceType<typeof SetMode2> {return i instanceof SetMode2; }
-    export function isGlobalTranspose(i : any) : i is InstanceType<typeof GlobalTranspose> {return i instanceof GlobalTranspose; }
-    export function isGlobalPedalMode(i : any) : i is InstanceType<typeof GlobalPedalMode> {return i instanceof GlobalPedalMode; }
-    export function isGlobalCommonChannel(i : any) : i is InstanceType<typeof GlobalCommonChannel> {return i instanceof GlobalCommonChannel; }
-    export function isInitiateConnection(i : any) : i is InstanceType<typeof InitiateConnection> {return i instanceof InitiateConnection; }
-    export function isConfirmConnection(i : any) : i is InstanceType<typeof ConfirmConnection> {return i instanceof ConfirmConnection; }
-    export function isCheckAttached(i : any) : i is InstanceType<typeof CheckAttached> {return i instanceof CheckAttached; }
-    export function isConfirmAttached(i : any) : i is InstanceType<typeof ConfirmAttached> {return i instanceof ConfirmAttached; }
-    export function isEndOfDump(i : any) : i is InstanceType<typeof EndOfDump> {return i instanceof EndOfDump; }
-    export function isRequestProgramNameDump(i : any) : i is InstanceType<typeof RequestProgramNameDump> {return i instanceof RequestProgramNameDump; }
-    export function isEndOfProgramNameDump(i : any) : i is InstanceType<typeof EndOfProgramNameDump> {return i instanceof EndOfProgramNameDump; }
-    export function isBeginDumpIn(i : any) : i is InstanceType<typeof BeginDumpIn> {return i instanceof BeginDumpIn; }
-    export function isEndProgramDump(i : any) : i is InstanceType<typeof EndProgramDump> {return i instanceof EndProgramDump; }
-    export function isSetSessionMode(i : any) : i is InstanceType<typeof SetSessionMode> {return i instanceof SetSessionMode; }
+    export function isProgramDump(i: any): i is InstanceType<typeof ProgramDump> { return i instanceof ProgramDump; }
+    export function isProgramParam(i: any): i is InstanceType<typeof ProgramParam> { return i instanceof ProgramParam; }
+    export function isGroupDump(i: any): i is InstanceType<typeof GroupDump> { return i instanceof GroupDump; }
+    export function isGroupOrder(i: any): i is InstanceType<typeof GroupOrder> { return i instanceof GroupOrder; }
+    export function isWhiteBlackBalance(i: any): i is InstanceType<typeof WhiteBlackBalance> { return i instanceof WhiteBlackBalance; }
+    export function isSetKeyBalance(i: any): i is InstanceType<typeof SetKeyBalance> { return i instanceof SetKeyBalance; }
+    export function isSetKeyBalances(i: any): i is InstanceType<typeof SetKeyBalances> { return i instanceof SetKeyBalances; }
+    export function isVelocityCurve(i: any): i is InstanceType<typeof VelocityCurve> { return i instanceof VelocityCurve; }
+    export function isRecallProgram(i: any): i is InstanceType<typeof RecallProgram> { return i instanceof RecallProgram; }
+    export function isStoreProgram(i: any): i is InstanceType<typeof StoreProgram> { return i instanceof StoreProgram; }
+    export function isProgramName(i: any): i is InstanceType<typeof ProgramName> { return i instanceof ProgramName; }
+    export function isSetMode2(i: any): i is InstanceType<typeof SetMode2> { return i instanceof SetMode2; }
+    export function isGlobalTranspose(i: any): i is InstanceType<typeof GlobalTranspose> { return i instanceof GlobalTranspose; }
+    export function isGlobalPedalMode(i: any): i is InstanceType<typeof GlobalPedalMode> { return i instanceof GlobalPedalMode; }
+    export function isGlobalCommonChannel(i: any): i is InstanceType<typeof GlobalCommonChannel> { return i instanceof GlobalCommonChannel; }
+    export function isInitiateConnection(i: any): i is InstanceType<typeof InitiateConnection> { return i instanceof InitiateConnection; }
+    export function isConfirmConnection(i: any): i is InstanceType<typeof ConfirmConnection> { return i instanceof ConfirmConnection; }
+    export function isCheckAttached(i: any): i is InstanceType<typeof CheckAttached> { return i instanceof CheckAttached; }
+    export function isConfirmAttached(i: any): i is InstanceType<typeof ConfirmAttached> { return i instanceof ConfirmAttached; }
+    export function isEndOfDump(i: any): i is InstanceType<typeof EndOfDump> { return i instanceof EndOfDump; }
+    export function isRequestProgramNameDump(i: any): i is InstanceType<typeof RequestProgramNameDump> { return i instanceof RequestProgramNameDump; }
+    export function isEndOfProgramNameDump(i: any): i is InstanceType<typeof EndOfProgramNameDump> { return i instanceof EndOfProgramNameDump; }
+    export function isBeginDumpIn(i: any): i is InstanceType<typeof BeginDumpIn> { return i instanceof BeginDumpIn; }
+    export function isEndProgramDump(i: any): i is InstanceType<typeof EndProgramDump> { return i instanceof EndProgramDump; }
+    export function isSetSessionMode(i: any): i is InstanceType<typeof SetSessionMode> { return i instanceof SetSessionMode; }
 }
 
 
@@ -457,10 +461,9 @@ class SL88API {
 
     async loadProgram(programNo: number = 16383) {
         var r = await this.device.requestObjectAsync(SL.RecallProgram.hex(programNo), SL.ProgramDump.from);
-        println(`program received : ${r.programNo}`);
-        println(r.program.name);
-        println(JSON.stringify(r.program));
-        r.program.device = this.device;       // make it "live" so that changes are recorded to ram
+        println(`program received : ${r.programNo} - ${r.program.name}`);
+        println(r.program.data.join(","));
+        //r.program.device = this.device;       // make it "live" so that changes are recorded to ram
         return r.program;
     }
 
@@ -483,7 +486,7 @@ class SL88API {
             else if (SL.isSetMode2(r)) {
                 println(r.toString());
             }
-            else if (SL.isProgramDump(r)) {                
+            else if (SL.isProgramDump(r)) {
                 println('Got program data! :D');
                 println(`program ${r.programNo} : ${r.program}`)
             }
@@ -499,5 +502,55 @@ class SL88API {
             r = await this.device.awaitReply(SL.try_decode);
         }
         return results;
+    }
+
+    /** Creates track selection programs at a given slot as well as a tracks group*/
+    async createTrackPrograms(firstTrackProgram: number = 0, tracksGroup: number = 0) {
+        const device = this.device;
+        const prog = SL.Program.newDefault();
+        const indices = [];
+        for (var i = 0; i < 30; i++) {
+            prog.name = `Track ${1 + i}`;
+
+            prog.zones[0].instrument = `Track ${1 + i}`;
+            prog.zones[0].sound = 'Keys (ch1)';
+            prog.zones[0].enabled = 'On';
+            prog.zones[0].midiChannel = 0;
+            prog.zones[0].stick1X = "pitchbend";
+            prog.zones[0].stick1Y = "modulation";
+            prog.zones[0].pedal1 = 'damperPedal';
+            prog.zones[0].pedal3 = 'aftertouch';
+
+            prog.zones[2].instrument = 'Stick 1 X';
+            prog.zones[2].sound = 'Pitchbend';
+            prog.zones[2].enabled = 'On';
+            prog.zones[2].midiChannel = 14;
+            prog.zones[2].stick1X = "pitchbend";
+
+            prog.zones[3].instrument = 'Stick 1 Y';
+            prog.zones[3].sound = 'Pitchbend';
+            prog.zones[3].enabled = 'On';
+            prog.zones[3].midiChannel = 15;
+            prog.zones[3].programChange = i;
+            prog.zones[3].LSB = 1;  // track mode
+            prog.zones[3].MSB = i;  // track number
+            prog.zones[3].stick1Y = "pitchbend";
+
+            var programNo = firstTrackProgram + i;
+            indices.push(programNo);
+            //   println(`Creating ${prog.name}`);
+            await device.sendAsync(new SL.ProgramDump(programNo, prog).toHex());
+        }
+        await device.sendAsync(new SL.GroupDump(tracksGroup, 'TRACKS', indices, true).toHex());
+    }
+
+    async setTracksInGroup(numberOfTracks : number, firstTrackProgram : number = 0, tracksGroup : number = 0) {
+        const indices = Array(numberOfTracks).map((_,i) => firstTrackProgram + i);
+        await this.device.sendAsync(new SL.GroupDump(tracksGroup, 'TRACKS', indices, true).toHex());
+        this.ddd<SL.GroupDump>()
+    }
+
+    ddd<T extends abstract new(...args : any[]) => any>(...args : ConstructorParameters<T>) {
+        return "";
     }
 }

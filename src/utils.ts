@@ -32,12 +32,12 @@ function hex2ascii(hex: string) {
   return str.trim();
 }
 
-function unicode2hex(str: string, maxlen?: number) {
-  maxlen = maxlen || str.length;
-  var str = "";
+function unicode2hex(uni: string, maxlen?: number) {
+  maxlen = maxlen || uni.length;
+  var hex = "";
   for (let i = 0; i < maxlen; i++)
-    str += (i < str.length && i < maxlen - 1) ? word2hex(str.charCodeAt(i)) : "0000";
-  return str;
+    hex += (i < uni.length && i < maxlen - 1) ? word2hex(uni.charCodeAt(i)) : "0000";
+  return hex;
 }
 
 function hex2unicode(hex: string) {
@@ -171,6 +171,7 @@ abstract class SysexBase {
   async sendAsync(hex: string) {
     return new Promise<void>((resolve, reject) => {
       this.send(hex);
+      //println(hex);
       host.scheduleTask(resolve, 100);
     })
   }

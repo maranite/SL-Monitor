@@ -111,8 +111,8 @@ The headings Z1-4 denote the offset for each respective zone.
 | program change        | 132 | 133 | 134 | 135 | 1     | 0-127=program change<br>255=Off                                |
 | Bank MSB              | 136 | 137 | 138 | 139 | 1     | 0-127=Bank MSB (CC 00)<br>255=Off                              |
 | Bank LSB              | 140 | 141 | 142 | 143 | 1     | 0-127=Bank LSB (CC 32)<br>255=Off                              |
-| lowKey                | 144 | 145 | 146 | 147 | 1     | 0-127=lowest key to transmit for zone                          |
-| highKey               | 148 | 149 | 150 | 151 | 1     | 0-127=highest key to transmit for zone                         |
+| lowKey                | 144 | 145 | 146 | 147 | 1     | 21-108=lowest key to transmit for zone  (A0-C8)                |
+| highKey               | 148 | 149 | 150 | 151 | 1     | 21-108=highest key to transmit for zone (A0-C8)                |
 | curve type            | 152 | 153 | 154 | 155 | 1     | See [curve type](#curve-type)                                  |
 | lowVel                | 156 | 157 | 158 | 159 | 1     | 0-127=lowest velocity to transmit for zone                     |
 | highVel               | 160 | 161 | 162 | 163 | 1     | 0-127=highest velocity to transmit for zone                    |
